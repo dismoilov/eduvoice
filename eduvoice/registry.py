@@ -12,6 +12,10 @@ from typing import Literal
 
 NextAction = Literal["operator", "hangup"]
 
+# A call announced by the dialplan but never connected to the bridge is abandoned after
+# this long: longer than any real call (MAX_CALL_S is 360 s), so a live one is never hit.
+ABANDONED_AFTER_S = 900.0
+
 # Safe default: if we know nothing about a call, a human takes it.
 DEFAULT_NEXT: NextAction = "operator"
 
@@ -101,17 +105,32 @@ class CallRegistry:
         return sum(1 for r in self._calls.values() if r.ended_at is None and r.connected)
 
     def _forget_old(self) -> None:
-        """Keeps memory bounded. A call that is still running is never forgotten —
-        losing it would make the dialplan ask about an unknown call later."""
-        still_running: list[str] = []
-        while len(self._order) > self._keep_last:
-            call_id = self._order.pop(0)
+        """Keeps memory bounded. A call that is still running is never forgotten — losing
+        it would make the dialplan ask about an unknown call later.
+
+        "Still running" has to mean more than "never finished". The dialplan announces a
+        call before it dials, so a caller who rings off in that second, or a dial that
+        fails, leaves a record that no session will ever finish. Pinned for ever, those
+        accumulate: measured, forty thousand of them made one new announcement block the
+        event loop for 126 ms, which every caller on the line hears as the same gap at the
+        same instant. A record that never reached the bridge is therefore forgotten once
+        it is older than a whole call could be.
+        """
+        if len(self._order) <= self._keep_last:
+            return
+        cutoff = time.time() - ABANDONED_AFTER_S
+        keep: list[str] = []
+        excess = len(self._order) - self._keep_last
+        for position, call_id in enumerate(self._order):
             record = self._calls.get(call_id)
-            if record is not None and record.ended_at is None:
-                still_running.append(call_id)
+            if record is None:
                 continue
-            self._calls.pop(call_id, None)
-        self._order = still_running + self._order
+            running = record.ended_at is None and (record.connected or record.started_at > cutoff)
+            if position < excess and not running:
+                self._calls.pop(call_id, None)
+                continue
+            keep.append(call_id)
+        self._order = keep
 
 
 registry = CallRegistry()

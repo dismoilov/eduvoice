@@ -221,6 +221,29 @@ a { color: inherit; }
   transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 .rail nav a:hover { background: var(--rail-2); color: var(--rail-text-strong); }
+/* The rail is the first seven tab stops on every page, and the browser's own thin blue
+   ring is nearly invisible on navy. */
+.rail nav a:focus-visible, .rail .btn:focus-visible { outline: none; box-shadow: var(--focus); }
+/* Signing out was the dimmest thing on the screen: measured 3.06:1 against the rail. */
+.rail .btn.ghost { color: var(--rail-text-strong); border-color: var(--rail-text); }
+.rail .btn.ghost:hover { color: #fff; border-color: #fff; }
+/* Chrome's own placeholder colour never follows the theme. */
+::placeholder { color: var(--muted); opacity: 1; }
+
+/* Seven tab stops before any content, on every page. */
+.skip { position: absolute; left: -9999px; top: 0; z-index: 20; background: var(--accent);
+  color: #fff; padding: 10px 16px; font-weight: 700; }
+.skip:focus { left: 0; }
+
+/* A supervisor filing one call on paper printed the navigation menu first and the call
+   on the second sheet. */
+@media print {
+  .rail, .topbar form, .pager, .toolbar, .btn { display: none !important; }
+  .layout, .content { display: block; margin: 0; padding: 0; }
+  .card, table.grid { break-inside: avoid; border-color: #999; }
+  .topbar { position: static; border: none; padding: 0 0 8px; }
+  body { background: #fff; color: #000; }
+}
 .rail nav a[aria-current="page"] {
   background: var(--rail-2); color: var(--rail-text-strong); border-left-color: var(--accent);
   font-weight: 600;
@@ -255,9 +278,14 @@ a { color: inherit; }
    wrap: it pushes the card past the edge of the screen and takes the column beside it
    with it. */
 .card > header h2, .card .body, .facts dd, table.grid td, .bars .row { overflow-wrap: anywhere; }
-/* In a list a long subject must take one line and stop, or one row swallows the screen. */
-table.grid td .row-link { display: block; max-width: 60ch; overflow: hidden;
+/* In a list a long subject must take one line and stop, or one row swallows the screen.
+   `max-width` in ch is wider than a narrow sidebar column, and a grid track sized by its
+   content then pushed the whole right-hand column off the screen — measured 189 px past
+   the edge at a 1400 px window, which is a laptop or a projector. Bounded by the column
+   it is in, not by a guess at how wide that column will be. */
+table.grid td .row-link { display: block; max-width: 100%; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
+.cols-2 > * { min-width: 0; }   /* a grid track may be narrower than its content */
 .card > header {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2);
@@ -286,15 +314,30 @@ a.tile:hover { border-color: var(--accent); transform: translateY(-1px); }
   margin-top: 5px;
 }
 .tile.lead { background: var(--rail); border-color: var(--rail); color: #fff; }
+/* The flash paints its own background, which on the dark lead tile left white text
+   on cream for the whole 600 ms — and it fires exactly when a call comes in. */
+.tile.lead.updating { animation: none; box-shadow: inset 0 0 0 2px var(--accent); }
 .tile.lead .label, .tile.lead .value small { color: #a9bbcd; }
 .tile.alert .value { color: var(--warn); }
 
 /* =========================================================== tables ======= */
 table.grid { width: 100%; border-collapse: collapse; }
+/* For the narrow cards beside the main column. There, a cell must decide nothing about
+   how wide its column is: with automatic layout one unbroken 5000-character subject set
+   the column's minimum width and pushed the whole right-hand column 189 px past the edge
+   of a 1400 px screen. On the wide list screens automatic layout is what gives the
+   question its room, so it stays. */
+table.grid.narrow { table-layout: fixed; }
+table.grid.narrow td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* `width: 1%` means "as narrow as the content" only under automatic layout; here it
+   would be one per cent of the card, which erased the ticket numbers entirely. */
+table.grid.narrow td.tight { width: 96px; }
 table.grid th {
   text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--muted); font-weight: 700; padding: 9px 12px; border-bottom: 1px solid var(--line);
-  background: var(--surface-2); position: sticky; top: 0; z-index: 1;
+  /* Below the topbar, which is itself sticky and 53 px tall — at top: 0 the headings
+     scrolled straight under it and an operator lost the column names. */
+  background: var(--surface-2); position: sticky; top: 53px; z-index: 4;
 }
 table.grid td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 table.grid tbody tr { transition: background-color 120ms ease; }
@@ -321,6 +364,9 @@ table.grid td.controls form { display: flex; gap: 6px; align-items: center; }
 .tag.in_progress { color: var(--accent); }
 .tag.overdue { color: var(--danger); }
 .tag.plain { color: var(--muted); }
+/* Declared after .tag.plain, or an urgent ticket reads exactly like a trivial one. */
+.tag.high.plain { color: var(--danger); }
+.tag.normal.plain { color: var(--muted); }
 .overdue { color: var(--danger); font-weight: 700; }
 
 /* =========================================================== forms ======== */
@@ -375,11 +421,21 @@ dl.facts dd { margin: 4px 0 0; font-size: 14.5px; font-weight: 600; }
 .ruler .tick { position: absolute; top: 21px; width: 1px; height: 6px; background: var(--line-strong); }
 .ruler button {
   position: absolute; top: 2px; transform: translateX(-50%); min-width: 22px; height: 22px;
-  border: 1px solid var(--rail); background: var(--surface); color: var(--rail);
+  /* `--rail` is nearly the surface colour in the dark theme: this control measured
+     1.08:1 there, and it is the one the demonstration script says to click. */
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--text);
   font-size: 11.5px; font-weight: 700; cursor: pointer; padding: 0 5px;
   transition: background-color 120ms ease, color 120ms ease;
 }
-.ruler button:hover { background: var(--rail); color: #fff; }
+.ruler button:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+/* The same chip in the transcript: without a rule it fell back to the browser's own
+   button — rounded in a product with square corners, and a white blob in dark. */
+button.at {
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--text);
+  font-size: 12px; padding: 2px 8px; cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+button.at:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 .ruler-foot { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); }
 
 /* ======================================================== transcript ====== */

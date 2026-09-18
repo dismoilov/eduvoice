@@ -153,11 +153,15 @@ document.addEventListener("keydown", (event) => {
       const key = node.dataset.figure;
       if (!(key in figures)) return;
       const format = node.dataset.format === "ms" ? asMs : String;
-      // "1.5 s" is 1500, not 15: read the number the way it was written.
+      /* "1.5 s" is 1500, not 15: read the number the way it was written. And "900 ms"
+         also ends in "s" — read as seconds it made the tile count through 891.5 s, so
+         the answer time briefly claimed a quarter of an hour. */
       const shown = String(node.textContent).trim();
-      const before = shown.endsWith("s")
-        ? Math.round(parseFloat(shown) * 1000) || 0
-        : parseInt(shown.replace(/[^\d-]/g, ""), 10) || 0;
+      const before = /\d\s*ms$/.test(shown)
+        ? parseFloat(shown) || 0
+        : /\d\s*s$/.test(shown)
+          ? Math.round(parseFloat(shown) * 1000) || 0
+          : parseInt(shown.replace(/[^\d-]/g, ""), 10) || 0;
       const after = Number(figures[key]) || 0;
       if (format(after) === node.textContent) return;
       countTo(node, before, after, format);
@@ -185,7 +189,10 @@ document.addEventListener("keydown", (event) => {
         const bar = column.querySelector(`.seg-bar.${kind}`);
         if (bar) bar.style.height = share(day[kind]);
       });
-      column.title = `${day.label}: ${day.calls}`;
+      /* Keeping the breakdown the template wrote: the chart has no legend, so this
+         tooltip is the only way to read what the colours mean. */
+      const legend = column.title.split(" — ")[1];
+      column.title = `${day.label}: ${day.calls}${legend ? " — " + legend : ""}`;
     });
   }
 

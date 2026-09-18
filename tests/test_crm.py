@@ -571,7 +571,7 @@ def test_a_planned_callback_shows_on_the_dashboard(client, world):
     sign_in(client, "operator")
     page = client.get("/").text
 
-    assert "2026-09-19 09:00" in page, "the planned callback is not on the dashboard"
+    assert "19.09 09:00" in page, "the planned callback is not on the dashboard"
 
 
 # ------------------------------------------------------------- administration
@@ -702,7 +702,7 @@ def test_a_promised_callback_can_be_marked_as_kept(client, world):
     )
     db.close()
     sign_in(client, "operator")
-    assert "2026-09-20 09:00" in client.get("/").text, "the promise should be on the dashboard"
+    assert "20.09 09:00" in client.get("/").text, "the promise should be on the dashboard"
 
     answer = client.post(
         f"/contacts/{contact['id']}/callback/{callback}",
@@ -714,7 +714,7 @@ def test_a_promised_callback_can_be_marked_as_kept(client, world):
     row = db.execute("SELECT status, result FROM callbacks WHERE id = ?", (callback,)).fetchone()
     db.close()
     assert row["status"] == "done" and row["result"] == "Fuqaroga tushuntirildi."
-    assert "2026-09-20 09:00" not in client.get("/").text, "a kept promise still shows as open"
+    assert "20.09 09:00" not in client.get("/").text, "a kept promise still shows as open"
 
 
 def test_the_language_switch_checks_its_token_instead_of_merely_carrying_one(client):

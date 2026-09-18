@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}{{ t('app') }}{% endblock %} — {{ t('app') }}</title>
+<title>{% block title %}{{ self.heading() }}{% endblock %} — {{ t('app') }}</title>
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body data-updated="{{ t('updated') }}" data-service-ok="{{ t('dash_service_ok') }}" data-service-down="{{ t('dash_service_down') }}">
+<a class="skip" href="#content">{{ t('skip_to_content') }}</a>
 <div class="shell">
   <aside class="rail">
     <div class="brand">
@@ -50,7 +51,8 @@
       {% block topbar %}{% endblock %}
       <div class="grow"></div>
       <form class="search" action="/search" method="get">
-        <input type="search" name="q" value="{{ query.get('q', '') }}" placeholder="{{ t('search_hint') }}">
+        <input type="search" name="q" id="topsearch" aria-label="{{ t('search_hint') }}"
+               value="{{ query.get('q', '') }}" placeholder="{{ t('search_hint') }}">
       </form>
       <form method="post" action="/prefs" class="seg sm">
         <input type="hidden" name="back" value="{{ path }}">
@@ -65,7 +67,7 @@
         <button name="language" value="ru" aria-pressed="{{ 'true' if lang == 'ru' else 'false' }}">RU</button>
       </form>
     </div>
-    <div class="content">{% block content %}{% endblock %}</div>
+    <div class="content" id="content">{% block content %}{% endblock %}</div>
   </main>
 </div>
 <script src="/static/app.js"></script>

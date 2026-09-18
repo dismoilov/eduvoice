@@ -147,3 +147,27 @@ async def test_a_flood_of_announcements_cannot_evict_a_running_call(api):
 
     assert registry.get(live) is not None
     assert registry.next_action(live) == "operator"
+
+
+def test_calls_that_never_reached_the_bridge_are_eventually_forgotten():
+    """The dialplan announces a call before it dials, so some announcements never become
+    calls: the caller rings off in that second, or the dial fails. Kept for ever because
+    nothing ever finishes them, they pile up — measured at forty thousand, one new
+    announcement blocked the event loop for 126 ms, which every caller on the line hears
+    as the same gap at the same moment.
+    """
+    from eduvoice.registry import ABANDONED_AFTER_S, CallRegistry
+
+    registry = CallRegistry(keep_last=50)
+    for n in range(500):
+        record = registry.start(f"stale-{n}")
+        record.started_at -= ABANDONED_AFTER_S + 60  # long enough ago to be abandoned
+    live = registry.start("real-call")
+    live.connected = True
+    for n in range(100):
+        registry.start(f"fresh-{n}")
+
+    assert registry.get("real-call") is not None, "a connected call must never be dropped"
+    assert registry.get("fresh-99") is not None, "a just-announced call is still expected"
+    assert registry.get("stale-0") is None, "an abandoned announcement was kept for ever"
+    assert len(registry._calls) <= 120, f"{len(registry._calls)} records retained"
