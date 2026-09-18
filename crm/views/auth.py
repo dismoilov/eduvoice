@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends, Form, Request
 
 from crm import repo
 from crm.config import settings
-from crm.deps import LANG_COOKIE, THEME_COOKIE, get_db, page, redirect
+from crm.deps import LANG_COOKIE, THEME_COOKIE, get_db, page, redirect, safe_path
 from crm.i18n import LANGUAGES
-from crm.security import SESSION_COOKIE, LoginThrottle, make_session, verify_password
+from crm.security import SESSION_COOKIE, LoginThrottle, csrf_ok, make_session, verify_password
 
 router = APIRouter()
 throttle = LoginThrottle(settings.login_attempts, settings.login_block_s)
@@ -18,7 +18,7 @@ throttle = LoginThrottle(settings.login_attempts, settings.login_block_s)
 
 @router.get("/login")
 def login_form(request: Request, next: str = "/"):
-    return page(request, "login.html", None, next=next, error="")
+    return page(request, "login.html", None, next=safe_path(next), error="")
 
 
 @router.post("/login")
@@ -27,21 +27,33 @@ def login(
     login: str = Form(""),
     password: str = Form(""),
     next: str = Form("/"),
+    csrf: str = Form(""),
     db: sqlite3.Connection = Depends(get_db),
 ):
+    if not csrf_ok(request.app.state.session_secret, request.cookies.get(SESSION_COOKIE), csrf):
+        # Without this another site could log an operator into an account it controls.
+        return page(request, "login.html", None, next=safe_path(next), error="login_failed")
+
     blocked = throttle.blocked_for(login)
     if blocked:
-        return page(request, "login.html", None, next=next, error="login_blocked", seconds=blocked)
+        return page(
+            request,
+            "login.html",
+            None,
+            next=safe_path(next),
+            error="login_blocked",
+            seconds=blocked,
+        )
 
     user = repo.user_by_login(db, login)
     if user is None or not verify_password(password, user["password_hash"]):
         throttle.failed(login)
         repo.audit(db, user_id=None, login=login, action="login_failed")
-        return page(request, "login.html", None, next=next, error="login_failed")
+        return page(request, "login.html", None, next=safe_path(next), error="login_failed")
 
     throttle.passed(login)
     repo.audit(db, user_id=user["id"], login=user["login"], action="login")
-    response = redirect(next if next.startswith("/") else "/")
+    response = redirect(safe_path(next))
     response.set_cookie(
         SESSION_COOKIE,
         make_session(request.app.state.session_secret, int(user["id"])),

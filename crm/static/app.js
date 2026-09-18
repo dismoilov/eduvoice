@@ -108,3 +108,93 @@ document.addEventListener("keydown", (event) => {
   const search = document.querySelector("form.search input");
   if (search) { event.preventDefault(); search.focus(); }
 });
+
+
+// --- the dashboard keeps itself up to date -----------------------------------
+// Numbers change while you watch them: a supervisor should not have to reload a page
+// to see that a call is happening right now.
+(function liveDashboard() {
+  const box = document.getElementById("figures");
+  if (!box) return;
+
+  const EVERY_MS = 10000;
+  const updatedAt = document.getElementById("updated");
+  const state = document.getElementById("bridge-state");
+  const bridgeText = document.getElementById("bridge-text");
+  const unhandledRow = document.getElementById("unhandled-row");
+  const strings = document.body.dataset;
+
+  const asMs = (value) =>
+    value >= 1000 ? `${(value / 1000).toFixed(1)} s` : `${Math.round(value)} ms`;
+
+  /* Counts from the old number to the new one, so a change is noticed instead of
+     silently replacing a digit. Long jumps are still short in time. */
+  function countTo(node, from, to, format) {
+    const started = performance.now();
+    const duration = Math.min(600, 200 + Math.abs(to - from) * 8);
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced || from === to) {
+      node.textContent = format(to);
+      return;
+    }
+    function frame(now) {
+      const share = Math.min(1, (now - started) / duration);
+      const eased = 1 - Math.pow(1 - share, 3);
+      node.textContent = format(Math.round(from + (to - from) * eased));
+      if (share < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function apply(figures) {
+    document.querySelectorAll("[data-figure]").forEach((node) => {
+      const key = node.dataset.figure;
+      if (!(key in figures)) return;
+      const format = node.dataset.format === "ms" ? asMs : String;
+      // "1.5 s" is 1500, not 15: read the number the way it was written.
+      const shown = String(node.textContent).trim();
+      const before = shown.endsWith("s")
+        ? Math.round(parseFloat(shown) * 1000) || 0
+        : parseInt(shown.replace(/[^\d-]/g, ""), 10) || 0;
+      const after = Number(figures[key]) || 0;
+      if (format(after) === node.textContent) return;
+      countTo(node, before, after, format);
+      const tile = node.closest(".tile") || node;
+      tile.classList.remove("updating");
+      void tile.offsetWidth;            // restart the flash even on a repeated change
+      tile.classList.add("updating");
+    });
+    if (unhandledRow) unhandledRow.classList.toggle("hidden", !figures.unhandled_calls);
+  }
+
+  async function refresh() {
+    try {
+      const response = await fetch("/api/dashboard", { headers: { Accept: "application/json" } });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/";   // the session ended while the tab was open
+        return;
+      }
+      if (!response.ok) return;
+      const data = await response.json();
+      apply(data.figures);
+      if (state) {
+        const pulse = state.querySelector(".pulse");
+        pulse.className = `pulse${data.bridge.up ? (data.bridge.active_calls ? " busy" : "") : " down"}`;
+        if (bridgeText) {
+          bridgeText.textContent = data.bridge.up
+            ? (data.bridge.active_calls ? `${data.bridge.active_calls} · ` : "") + strings.serviceOk
+            : strings.serviceDown;
+        }
+      }
+      if (updatedAt) updatedAt.textContent = `${strings.updated} ${data.at}`;
+    } catch {
+      /* a refresh that did not happen is not worth showing anybody */
+    }
+  }
+
+  refresh();
+  setInterval(refresh, EVERY_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refresh();    // back to the tab: show the truth immediately
+  });
+})();

@@ -6,14 +6,12 @@
 <title>{% block title %}{{ t('app') }}{% endblock %} — {{ t('app') }}</title>
 <link rel="stylesheet" href="/static/app.css">
 </head>
-<body>
+<body data-updated="{{ t('updated') }}" data-service-ok="{{ t('dash_service_ok') }}" data-service-down="{{ t('dash_service_down') }}">
 <div class="shell">
   <aside class="rail">
     <div class="brand">
-      <div>
-        <span class="name">EduVoice<span class="dot"></span></span>
-        <span class="sub">{{ t('app_sub') }}</span>
-      </div>
+      <span class="name">EduVoice<span class="dot"></span></span>
+      <span class="sub">{{ t('app_sub') }}</span>
     </div>
     <nav>
       {% macro item(href, key, icon) %}
@@ -38,7 +36,7 @@
     <div class="foot">
       <div class="who">{{ user.name }}</div>
       <div>{{ t('role_' + user.role) }}{% if user.extension %} · {{ user.extension }}{% endif %}</div>
-      <div style="margin-top:8px"><a href="/logout">{{ t('logout') }}</a></div>
+      <div class="mt"><a href="/logout">{{ t('logout') }}</a></div>
     </div>
     {% endif %}
   </aside>
@@ -51,13 +49,15 @@
       <form class="search" action="/calls" method="get">
         <input type="search" name="q" value="{{ query.get('q', '') }}" placeholder="{{ t('search_hint') }}">
       </form>
-      <form method="post" action="/prefs" class="switch">
+      <form method="post" action="/prefs" class="seg sm">
         <input type="hidden" name="back" value="{{ path }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
         <button name="theme" value="light" aria-pressed="{{ 'true' if theme == 'light' else 'false' }}">{{ t('theme_light') }}</button>
         <button name="theme" value="dark" aria-pressed="{{ 'true' if theme == 'dark' else 'false' }}">{{ t('theme_dark') }}</button>
       </form>
-      <form method="post" action="/prefs" class="switch">
+      <form method="post" action="/prefs" class="seg sm">
         <input type="hidden" name="back" value="{{ path }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
         <button name="language" value="uz" aria-pressed="{{ 'true' if lang == 'uz' else 'false' }}">UZ</button>
         <button name="language" value="ru" aria-pressed="{{ 'true' if lang == 'ru' else 'false' }}">RU</button>
       </form>

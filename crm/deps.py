@@ -45,6 +45,10 @@ def theme_of(request: Request) -> str:
 class NotLoggedIn(Exception):
     """Raised instead of returning a page, so the app can send the visitor to the login."""
 
+    def __init__(self, path: str = "/") -> None:
+        super().__init__(path)
+        self.path = path
+
 
 def current_user(request: Request, db: sqlite3.Connection = Depends(get_db)) -> dict[str, Any]:
     session = read_session(
@@ -53,10 +57,10 @@ def current_user(request: Request, db: sqlite3.Connection = Depends(get_db)) -> 
         settings.session_hours * 3600,
     )
     if session is None:
-        raise NotLoggedIn
+        raise NotLoggedIn(request.url.path)
     user = repo.user(db, session.user_id)
     if user is None or not user["active"]:
-        raise NotLoggedIn
+        raise NotLoggedIn(request.url.path)
     return user
 
 
@@ -112,3 +116,14 @@ def page(
 def redirect(url: str) -> RedirectResponse:
     """A redirect after a form post, so a refresh does not repeat the action."""
     return RedirectResponse(url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+def safe_path(value: str, fallback: str = "/") -> str:
+    """Only our own paths may be redirected to.
+
+    "//evil.example" and "/\\evil.example" are valid URLs to another host: a login form
+    carrying one would hand the operator to a copy of this page.
+    """
+    if not value.startswith("/") or value.startswith("//") or value.startswith("/\\"):
+        return fallback
+    return value

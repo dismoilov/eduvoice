@@ -2,7 +2,7 @@
 {% import "_macros.html" as ui with context %}
 {% block heading %}{{ contact.name or contact.phone }}{% endblock %}
 {% block content %}
-{% if notice %}<div class="notice" style="margin-bottom:16px">{{ t(notice) }}</div>{% endif %}
+{% if notice %}<div class="notice mb">{{ t(notice) }}</div>{% endif %}
 <div class="cols-2">
   <div class="stack">
     <section class="card">
@@ -23,7 +23,7 @@
     <section class="card">
       <header>
         <h2>{{ t('contact_tickets') }}</h2><div class="grow"></div>
-        <a class="btn small" href="/tickets/new?contact_id={{ contact.id }}">{{ t('ticket_new') }}</a>
+        <a class="btn sm" href="/tickets/new?contact_id={{ contact.id }}">{{ t('ticket_new') }}</a>
       </header>
       <table class="grid">
         <tbody>
@@ -46,7 +46,7 @@
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <div class="field">
           <label>{{ t('contact_phone') }}</label>
-          <div class="mono" style="font-size:15px">{{ contact.phone }}</div>
+          <div class="mono lead-in">{{ contact.phone }}</div>
         </div>
         <div class="field">
           <label for="name">{{ t('contact_name') }}</label>
@@ -67,15 +67,36 @@
         </div>
         <div class="field">
           <label for="note">{{ t('contact_note') }}</label>
-          <textarea id="note" name="note" style="min-height:70px">{{ contact.note }}</textarea>
+          <textarea id="note" name="note" class="textarea-sm">{{ contact.note }}</textarea>
         </div>
         <button class="btn primary" type="submit">{{ t('save') }}</button>
       </form>
     </section>
 
+    {% if callbacks %}
+    <section class="card">
+      <header><h2>{{ t('callback_plan') }}</h2></header>
+      <table class="grid">
+        <tbody>
+          {% for row in callbacks %}
+          <tr>
+            <td class="tight num">{{ ui.when(row.due_at) }}</td>
+            <td>{{ row.assignee_name or '—' }}</td>
+            <td class="tight">
+              <span class="tag {{ 'resolved' if row.status == 'done' else 'waiting' }}">
+                {{ t('callback_done') if row.status == 'done' else t('callback_planned') }}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
     <section class="card">
       <header><h2>{{ t('actions') }}</h2></header>
-      <div class="body stack" style="gap:10px">
+      <div class="body stack">
         <form method="post" action="/contacts/{{ contact.id }}/call">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           <button class="btn dark" type="submit" {% if not user.extension %}disabled title="{{ t('user_extension') }}"{% endif %}>

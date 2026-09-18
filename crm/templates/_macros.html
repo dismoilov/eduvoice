@@ -16,7 +16,7 @@
     {% for row in rows %}
       <div class="col" title="{{ row.label }}: {{ row[key] }}">
         <div class="stack-bars">
-          <div class="seg base" style="height: {{ (row[key] / top * 100) | round(1) }}%"></div>
+          <div class="seg-bar base" style="height: {{ (row[key] / top * 100) | round(1) }}%"></div>
         </div>
         <div class="lbl">{{ row.label if loop.index0 % (2 if rows|length > 16 else 1) == 0 else '' }}</div>
       </div>
@@ -29,14 +29,14 @@
   {% set top = (rows | map(attribute='calls') | max) or 1 %}
   <div class="colchart" style="height: {{ height }}px">
     {% for row in rows %}
-      <div class="col" title="{{ row.label }}: {{ row.calls }}">
+      <a class="col" href="/calls?day={{ row.day }}" title="{{ row.label }}: {{ row.calls }} — {{ t('outcome_bot') }} {{ row.bot }}, {{ t('outcome_operator') }} {{ row.operator }}, {{ t('outcome_dropped') }} {{ row.dropped }}">
         <div class="stack-bars">
-          <div class="seg dropped" style="height: {{ (row.dropped / top * 100) | round(1) }}%"></div>
-          <div class="seg operator" style="height: {{ (row.operator / top * 100) | round(1) }}%"></div>
-          <div class="seg bot" style="height: {{ (row.bot / top * 100) | round(1) }}%"></div>
+          <div class="seg-bar dropped" style="height: {{ (row.dropped / top * 100) | round(1) }}%"></div>
+          <div class="seg-bar operator" style="height: {{ (row.operator / top * 100) | round(1) }}%"></div>
+          <div class="seg-bar bot" style="height: {{ (row.bot / top * 100) | round(1) }}%"></div>
         </div>
         <div class="lbl">{{ row.label }}</div>
-      </div>
+      </a>
     {% endfor %}
   </div>
 {% endmacro %}
@@ -46,7 +46,7 @@
   <div class="bars">
     {% for row in rows %}
       <div class="row">
-        <div class="nowrap" title="{{ row[label_key] }}" style="overflow:hidden;text-overflow:ellipsis">{{ row[label_key] }}</div>
+        <div class="ellipsis" title="{{ row[label_key] }}">{{ row[label_key] }}</div>
         <div class="track"><div class="fill" style="width: {{ (row[value_key] / top * 100) | round }}%"></div></div>
         <div class="num muted">{{ row[value_key] }}</div>
       </div>

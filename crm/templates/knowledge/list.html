@@ -3,7 +3,7 @@
 {% block heading %}{{ t('nav_knowledge') }}{% endblock %}
 {% block topbar %}
   <span class="tag published">{{ published }}</span>
-  {% if can(user, 'supervisor', 'admin') %}<a class="btn primary small" href="/knowledge/new">{{ t('kb_new') }}</a>{% endif %}
+  {% if can(user, 'supervisor', 'admin') %}<a class="btn primary sm" href="/knowledge/new">{{ t('kb_new') }}</a>{% endif %}
 {% endblock %}
 {% block content %}
 <section class="card">

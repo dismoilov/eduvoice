@@ -14,6 +14,10 @@ from crm.views.common import require_csrf
 
 router = APIRouter(prefix="/contacts")
 
+# Only these two messages can appear: the value arrives in the URL.
+NOTICES = {"call_back_started": "call_back_started", "call_back_failed": "call_back_failed"}
+KINDS = ("applicant", "student", "parent", "other")
+
 
 @router.get("")
 def contact_list(
@@ -42,9 +46,9 @@ def contact_detail(
         contact=contact,
         calls=repo.calls(db, contact_id=contact_id, limit=50),
         tickets=repo.tickets(db, contact_id=contact_id, limit=50),
-        callbacks=repo.callbacks(db, pending=False),
-        kinds=("applicant", "student", "parent", "other"),
-        notice=request.query_params.get("notice", ""),
+        callbacks=repo.callbacks(db, contact_id=contact_id, pending=False),
+        kinds=KINDS,
+        notice=NOTICES.get(request.query_params.get("notice", "")),
     )
 
 
@@ -61,6 +65,8 @@ def contact_update(
     db: sqlite3.Connection = Depends(get_db),
 ):
     require_csrf(request, csrf)
+    if kind not in KINDS:
+        kind = ""
     repo.update_contact(db, contact_id, name=name, kind=kind, university=university, note=note)
     repo.audit(
         db,

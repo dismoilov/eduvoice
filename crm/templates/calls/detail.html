@@ -23,8 +23,8 @@
           <button class="play" id="play" type="button">▶</button>
           <div class="readout num"><span id="at">0:00</span><span class="of"> / <span id="total">{{ ui.clock(call.duration_s) }}</span></span></div>
           <div class="grow"></div>
-          <button class="btn small" id="speed" type="button">1×</button>
-          <a class="btn small" href="/media/recordings/{{ call.call_id }}" download="{{ call.call_id }}.wav">{{ t('call_download') }}</a>
+          <button class="btn sm" id="speed" type="button">1×</button>
+          <a class="btn sm" href="/media/recordings/{{ call.call_id }}" download="{{ call.call_id }}.wav">{{ t('call_download') }}</a>
         </div>
         <div class="ruler" id="ruler"><div class="line"></div><div class="played"></div></div>
         <div class="ruler-foot">
@@ -74,9 +74,9 @@
     <section class="card">
       <header><h2>{{ t('contact') }}</h2></header>
       <div class="body">
-        <div style="font-weight:600">{{ call.contact_name or t('unknown') }}</div>
+        <div class="strong">{{ call.contact_name or t('unknown') }}</div>
         <div class="mono muted">{{ call.contact_phone }}</div>
-        <p style="margin:12px 0 0"><a class="btn small" href="/contacts/{{ call.contact_id }}">{{ t('open') }}</a></p>
+        <p class="mt"><a class="btn sm" href="/contacts/{{ call.contact_id }}">{{ t('open') }}</a></p>
       </div>
     </section>
     {% endif %}
@@ -96,7 +96,7 @@
           </div>
           <div class="field">
             <label for="body">{{ t('ticket_body') }}</label>
-            <textarea id="body" name="body" style="min-height:70px"></textarea>
+            <textarea id="body" name="body" class="textarea-sm"></textarea>
           </div>
           <div class="row">
             <div class="field">

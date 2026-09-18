@@ -2,13 +2,12 @@
 {% import "_macros.html" as ui with context %}
 {% block heading %}{{ t('nav_analytics') }}{% endblock %}
 {% block topbar %}
-  <div class="switch">
+  <div class="seg sm">
     {% for value in [7, 14, 30] %}
-      <a class="btn small" href="/analytics?days={{ value }}"
-         style="{% if days == value %}background:var(--rail);color:#fff;border-color:var(--rail){% endif %}">{{ value }}</a>
+      <a class="{{ 'is-active' if days == value else '' }}" href="/analytics?days={{ value }}">{{ value }}</a>
     {% endfor %}
   </div>
-  <a class="btn small" href="/analytics/export.csv">CSV</a>
+  <a class="btn sm" href="/analytics/export.csv">CSV</a>
 {% endblock %}
 {% block content %}
 <div class="stack">
@@ -44,7 +43,7 @@
       <header><h2>{{ t('an_by_day') }}</h2></header>
       <div class="body">
         {{ ui.stacked(data.by_day, 140) }}
-        <div style="display:flex;gap:16px;margin-top:10px;font-size:12.5px" class="muted">
+        <div class="legend">
           <span><span class="tag bot">{{ data.totals.bot }}</span> {{ t('outcome_bot') }}</span>
           <span><span class="tag operator">{{ data.totals.operator }}</span> {{ t('outcome_operator') }}</span>
           <span><span class="tag dropped">{{ data.totals.dropped }}</span> {{ t('outcome_dropped') }}</span>

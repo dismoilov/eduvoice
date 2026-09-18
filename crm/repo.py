@@ -40,6 +40,13 @@ def user(db: sqlite3.Connection, user_id: int) -> dict[str, Any] | None:
     return one(db.execute("SELECT * FROM users WHERE id = ?", (user_id,)))
 
 
+def user_exists(db: sqlite3.Connection, login: str) -> bool:
+    """Including deactivated people: the login column is unique for all of them."""
+    return (
+        db.execute("SELECT 1 FROM users WHERE login = ?", (login.strip(),)).fetchone() is not None
+    )
+
+
 def users(db: sqlite3.Connection, only_active: bool = False) -> list[dict[str, Any]]:
     where = "WHERE active = 1" if only_active else ""
     return rows(db.execute(f"SELECT * FROM users {where} ORDER BY active DESC, name"))
@@ -145,6 +152,7 @@ def calls(
     query: str = "",
     outcome: str = "",
     day: str = "",
+    since: str = "",
     contact_id: int | None = None,
     unhandled: bool = False,
     limit: int = 100,
@@ -159,6 +167,9 @@ def calls(
     if day:
         where.append("substr(c.started_at, 1, 10) = ?")
         params.append(day)
+    if since:
+        where.append("substr(c.started_at, 1, 10) >= ?")
+        params.append(since)
     if contact_id:
         where.append("c.contact_id = ?")
         params.append(contact_id)
@@ -221,6 +232,8 @@ def turns(db: sqlite3.Connection, call_pk: int) -> list[dict[str, Any]]:
 
 TICKET_COLUMNS = """
     t.*, ct.phone AS contact_phone, ct.name AS contact_name,
+    (t.due_at IS NOT NULL AND t.due_at < datetime('now', 'localtime')
+     AND t.status IN ('new', 'in_progress', 'waiting')) AS overdue,
     u.name AS assignee_name, a.name AS author_name,
     c.call_id AS call_uuid, c.started_at AS call_started_at
 """
@@ -285,11 +298,13 @@ def ticket(db: sqlite3.Connection, ticket_id: int) -> dict[str, Any] | None:
 
 
 def next_ticket_number(db: sqlite3.Connection) -> str:
+    """Continues from the largest number of the year, so deleting one never collides."""
     year = datetime.now().year
     row = db.execute(
-        "SELECT count(*) AS n FROM tickets WHERE number LIKE ?", (f"{year}-%",)
+        "SELECT max(cast(substr(number, 6) AS INTEGER)) AS last FROM tickets WHERE number LIKE ?",
+        (f"{year}-%",),
     ).fetchone()
-    return f"{year}-{int(row['n']) + 1:04d}"
+    return f"{year}-{int(row['last'] or 0) + 1:04d}"
 
 
 def create_ticket(
@@ -415,8 +430,8 @@ def knowledge_entries(db: sqlite3.Connection, status: str = "") -> list[dict[str
             f"""
             SELECT k.*, u.name AS author_name,
                    (SELECT count(*) FROM turns t JOIN calls c ON c.id = t.call_id
-                     WHERE t.faq_id = k.faq_id AND c.started_at >= date('now', '-30 day'))
-                   AS used_30d
+                     WHERE t.faq_id = k.faq_id
+                       AND c.started_at >= date('now', 'localtime', '-30 day')) AS used_30d
             FROM knowledge k LEFT JOIN users u ON u.id = k.author_id
             {where}
             ORDER BY k.status = 'draft' DESC, k.faq_id
@@ -428,6 +443,10 @@ def knowledge_entries(db: sqlite3.Connection, status: str = "") -> list[dict[str
 
 def knowledge_entry(db: sqlite3.Connection, entry_id: int) -> dict[str, Any] | None:
     return one(db.execute("SELECT * FROM knowledge WHERE id = ?", (entry_id,)))
+
+
+def knowledge_by_faq_id(db: sqlite3.Connection, faq_id: str) -> dict[str, Any] | None:
+    return one(db.execute("SELECT * FROM knowledge WHERE faq_id = ?", (faq_id.strip(),)))
 
 
 def create_knowledge(
@@ -523,7 +542,13 @@ def create_callback(
     return int(cursor.lastrowid or 0)
 
 
-def callbacks(db: sqlite3.Connection, *, assignee_id: int | None = None, pending: bool = True):
+def callbacks(
+    db: sqlite3.Connection,
+    *,
+    assignee_id: int | None = None,
+    contact_id: int | None = None,
+    pending: bool = True,
+) -> list[dict[str, Any]]:
     where = ["1 = 1"]
     params: list[Any] = []
     if pending:
@@ -531,6 +556,9 @@ def callbacks(db: sqlite3.Connection, *, assignee_id: int | None = None, pending
     if assignee_id:
         where.append("b.assignee_id = ?")
         params.append(assignee_id)
+    if contact_id:
+        where.append("b.contact_id = ?")
+        params.append(contact_id)
     return rows(
         db.execute(
             f"""

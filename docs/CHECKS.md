@@ -167,7 +167,12 @@ WARNING res_audiosocket.c: Failed to write data to AudioSocket
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://10.103.10.86:9095/calls     # 303 — без входа никак
-curl -s -c jar -o /dev/null -d "login=nazorat&password=ПАРОЛЬ" http://10.103.10.86:9095/login
+# вход теперь требует токен формы — так же, как из браузера
+CSRF=$(curl -s -c jar http://10.103.10.86:9095/login | grep -oE 'name="csrf" value="[^"]+"' \
+       | head -1 | sed 's/.*value="//; s/"//')
+curl -s -b jar -c jar -o /dev/null --data-urlencode "login=nazorat" \
+     --data-urlencode "password=ПАРОЛЬ" --data-urlencode "csrf=$CSRF" \
+     http://10.103.10.86:9095/login
 curl -s -b jar http://10.103.10.86:9095/calls | grep -c 99890                # звонки на месте
 ```
 

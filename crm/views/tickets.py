@@ -51,17 +51,19 @@ def ticket_list(
 @router.get("/new")
 def ticket_new(
     request: Request,
-    contact_id: str = "",
+    contact_id: int | None = None,
     user: dict = Depends(current_user),
     db: sqlite3.Connection = Depends(get_db),
 ):
+    """Opened from a citizen card, the form already knows whose request this is."""
+    contact = repo.contact(db, contact_id) if contact_id else None
     return page(
         request,
         "tickets/new.html",
         user,
         operators=repo.users(db, only_active=True),
         contacts=repo.contacts(db, limit=50),
-        contact_id=contact_id,
+        phone=contact["phone"] if contact else "",
     )
 
 

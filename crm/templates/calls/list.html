@@ -4,7 +4,7 @@
 {% block content %}
 <section class="card">
   <form class="filters auto" method="get">
-    <input type="search" name="q" value="{{ q }}" placeholder="{{ t('search_hint') }}" style="min-width:220px">
+    <input class="wide" type="search" name="q" value="{{ q }}" placeholder="{{ t('search_hint') }}">
     <select name="outcome">
       <option value="">{{ t('all') }}</option>
       {% for value in ['bot', 'operator', 'dropped'] %}
@@ -12,14 +12,14 @@
       {% endfor %}
     </select>
     <input type="date" name="day" value="{{ day }}">
-    <label class="muted" style="display:flex;gap:6px;align-items:center;font-size:13px">
-      <input type="checkbox" name="unhandled" value="1" {% if unhandled %}checked{% endif %} style="width:auto">
+    <label class="check">
+      <input type="checkbox" name="unhandled" value="1" {% if unhandled %}checked{% endif %}>
       {{ t('dash_unhandled') }}
     </label>
-    <button class="btn small" type="submit">{{ t('filter') }}</button>
-    <a class="btn small" href="/calls">{{ t('reset') }}</a>
+    <button class="btn sm" type="submit">{{ t('filter') }}</button>
+    <a class="btn sm" href="/calls">{{ t('reset') }}</a>
     <div class="grow"></div>
-    <span class="muted num">{{ calls|length }}</span>
+    <span class="muted num">{{ t('page') }} {{ page_no }}</span>
   </form>
 
   <table class="grid">
@@ -52,5 +52,15 @@
       {% endfor %}
     </tbody>
   </table>
+  {% if has_next or page_no > 1 %}
+  <div class="pager">
+    {% set base = '/calls?q=' ~ q ~ '&outcome=' ~ outcome ~ '&day=' ~ day ~ ('&unhandled=1' if unhandled else '') %}
+    <a class="btn sm {{ 'disabled' if page_no <= 1 }}" href="{{ base }}&page_no={{ page_no - 1 }}"
+       {% if page_no <= 1 %}aria-disabled="true"{% endif %}>←</a>
+    <span class="muted num">{{ page_no }}</span>
+    <a class="btn sm {{ 'disabled' if not has_next }}" href="{{ base }}&page_no={{ page_no + 1 }}"
+       {% if not has_next %}aria-disabled="true"{% endif %}>→</a>
+  </div>
+  {% endif %}
 </section>
 {% endblock %}

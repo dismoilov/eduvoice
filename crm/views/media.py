@@ -75,6 +75,8 @@ def recording(
         raise HTTPException(404, "no recording")
 
     size = path.stat().st_size
+    if size == 0:  # a recording that never got written must not hang the player
+        raise HTTPException(404, "empty recording")
     start, end = parse_range(request.headers.get("range", ""), size)
     length = end - start + 1
     headers = {

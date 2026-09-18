@@ -71,7 +71,14 @@ def client(world):
 
 
 def sign_in(client: TestClient, login: str = "operator") -> None:
-    response = client.post("/login", data={"login": login, "password": PASSWORD, "next": "/"})
+    """Signs in the way a browser does: open the form, then post it with its token."""
+    form = client.get("/login")
+    marker = 'name="csrf" value="'
+    start = form.text.index(marker) + len(marker)
+    csrf = form.text[start : form.text.index('"', start)]
+    response = client.post(
+        "/login", data={"login": login, "password": PASSWORD, "next": "/", "csrf": csrf}
+    )
     assert response.status_code == 303, "login should redirect on success"
 
 
@@ -93,8 +100,37 @@ def test_a_stranger_sees_nothing(client):
         assert response.headers["location"].startswith("/login"), path
 
 
+def test_a_login_form_from_another_site_is_refused(client):
+    """Login CSRF: otherwise a victim can be signed into an attacker's account."""
+    response = client.post(
+        "/login", data={"login": "operator", "password": PASSWORD, "csrf": "forged"}
+    )
+
+    assert response.status_code == 200
+    assert "eduvoice_session" not in response.cookies
+
+
+@pytest.mark.parametrize("target", ["//evil.example/", "/\\evil.example", "https://evil.example"])
+def test_login_never_redirects_to_another_site(client, target):
+    form = client.get("/login", params={"next": target})
+    marker = 'name="csrf" value="'
+    start = form.text.index(marker) + len(marker)
+    csrf = form.text[start : form.text.index('"', start)]
+
+    response = client.post(
+        "/login", data={"login": "operator", "password": PASSWORD, "next": target, "csrf": csrf}
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+
+
 def test_a_wrong_password_does_not_sign_anybody_in(client):
-    response = client.post("/login", data={"login": "operator", "password": "nope"})
+    form = client.get("/login")
+    marker = 'name="csrf" value="'
+    start = form.text.index(marker) + len(marker)
+    csrf = form.text[start : form.text.index('"', start)]
+    response = client.post("/login", data={"login": "operator", "password": "nope", "csrf": csrf})
 
     assert response.status_code == 200
     assert "eduvoice_session" not in response.cookies
@@ -331,3 +367,102 @@ def test_administration_creates_people_and_writes_down_who_did_it(client, world)
 
 def test_health_needs_no_password(client):
     assert client.get("/health").json()["status"] == "ok"
+
+
+def test_the_call_list_is_paged(client, world):
+    """A hundred thousand calls must never be rendered into one page."""
+    db = open_database(world)
+    for number in range(120):
+        save_call(
+            db,
+            {
+                "call_id": f"bulk-{number}",
+                "caller": "998900000000",
+                "started_at": f"2026-09-18 {number % 24:02d}:00:00",
+                "duration_s": 10.0,
+                "next_action": "hangup",
+                "ended_reason": "goodbye",
+                "turns": [],
+            },
+        )
+    db.close()
+    sign_in(client)
+
+    first = client.get("/calls")
+    second = client.get("/calls", params={"page_no": 2})
+
+    assert first.text.count('href="/calls/') == 100, "a page shows exactly one hundred calls"
+    assert "page_no=2" in first.text, "there must be a way to the next page"
+    assert second.status_code == 200
+    assert second.text.count('href="/calls/') > 0
+
+
+def test_an_empty_recording_is_not_served_as_a_broken_stream(client, world, tmp_path):
+    """A zero-byte file used to be answered with one byte of nothing: the player hung."""
+    empty = tmp_path / "rec" / "eduvoice" / "20260918" / "call-one.wav"
+    empty.write_bytes(b"")
+    sign_in(client)
+
+    assert client.get("/media/recordings/call-one").status_code == 404
+
+
+def test_a_background_refresh_after_the_session_ended_says_so(client):
+    """The dashboard must send the operator to the login, not freeze on old numbers."""
+    response = client.get("/api/dashboard")
+
+    assert response.status_code == 401
+    assert response.json()["error"] == "login_required"
+
+
+def test_a_duplicate_login_is_refused_without_crashing(client, world):
+    sign_in(client, "root")
+    csrf = token(client)
+
+    response = client.post(
+        "/admin/users",
+        data={
+            "login": "operator",
+            "name": "Another",
+            "role": "operator",
+            "password": "x-123456",
+            "csrf": csrf,
+        },
+    )
+
+    assert response.status_code == 303
+    db = open_database(world)
+    assert db.execute("SELECT count(*) FROM users WHERE login = 'operator'").fetchone()[0] == 1
+    db.close()
+
+
+def test_two_answers_published_in_the_same_second_are_both_noticed(client, world):
+    """The bridge polls a fingerprint: it must change on every publish, not every second."""
+    from store.knowledge import PublishedKnowledge
+
+    sign_in(client, "boss")
+    csrf = token(client)
+    client.post("/knowledge/new", data={"faq_id": "one", "answer": "A", "csrf": csrf})
+    client.post("/knowledge/new", data={"faq_id": "two", "answer": "B", "csrf": csrf})
+    client.post("/knowledge/1/status", data={"status": "published", "csrf": csrf})
+    knowledge = PublishedKnowledge(world)
+    first = dict(knowledge.entries())
+
+    client.post("/knowledge/2/status", data={"status": "published", "csrf": csrf})
+    knowledge._checked_at = 0.0
+
+    assert set(first) == {"one"}
+    assert set(knowledge.entries()) == {"one", "two"}, "the second publish was missed"
+
+
+def test_an_overdue_request_is_marked_as_such(client, world):
+    db = open_database(world)
+    db.execute(
+        "INSERT INTO tickets (number, subject, status, priority, due_at, created_at, updated_at)"
+        " VALUES ('2026-9999', 'Kechikkan', 'new', 'normal', '2020-01-01 10:00:00', ?, ?)",
+        ("2026-09-18 10:00:00", "2026-09-18 10:00:00"),
+    )
+    db.commit()
+    tickets = repo.tickets(db)
+    db.close()
+
+    assert tickets[0]["overdue"] == 1, "the deadline passed years ago"

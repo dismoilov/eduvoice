@@ -52,9 +52,12 @@ class PublishedKnowledge:
         try:
             connection = connect(self._path)
             try:
+                # Version and row id, not just the timestamp: two answers edited within
+                # the same second would otherwise look unchanged to the bridge.
                 stamp = connection.execute(
-                    "SELECT max(updated_at) || '/' || count(*) FROM knowledge"
-                    " WHERE status = 'published'"
+                    "SELECT count(*) || '/' || coalesce(sum(version), 0) || '/'"
+                    " || coalesce(max(id), 0) || '/' || coalesce(max(updated_at), '')"
+                    " FROM knowledge WHERE status = 'published'"
                 ).fetchone()[0]
                 if stamp != self._stamp:
                     self._cache = published(connection)

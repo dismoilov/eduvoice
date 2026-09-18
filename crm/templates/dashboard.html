@@ -4,31 +4,31 @@
 {% block content %}
 <div class="stack">
 
-  <div class="tiles">
-    <div class="tile lead">
-      <div class="value num">{{ figures.calls_today }}</div>
+  <div class="tiles" id="figures">
+    <a class="tile lead" href="/calls?day={{ today }}">
+      <div class="value num" data-figure="calls_today">{{ figures.calls_today }}</div>
       <div class="label">{{ t('dash_calls') }} · {{ t('today') }}</div>
-    </div>
+    </a>
     <div class="tile">
-      <div class="value num">{{ figures.questions_today }}</div>
+      <div class="value num" data-figure="questions_today">{{ figures.questions_today }}</div>
       <div class="label">{{ t('dash_questions') }}</div>
     </div>
     <div class="tile">
-      <div class="value num">{{ figures.without_operator_percent }}<small>%</small></div>
+      <div class="value num"><span data-figure="without_operator_percent">{{ figures.without_operator_percent }}</span><small>%</small></div>
       <div class="label">{{ t('dash_no_operator') }}</div>
     </div>
     <div class="tile">
-      <div class="value num">{{ ui.ms(figures.avg_answer_ms) }}</div>
+      <div class="value num" data-figure="avg_answer_ms" data-format="ms">{{ ui.ms(figures.avg_answer_ms) }}</div>
       <div class="label">{{ t('dash_avg') }}</div>
     </div>
-    <div class="tile">
-      <div class="value num">{{ figures.open_tickets }}</div>
+    <a class="tile" href="/tickets?status=open">
+      <div class="value num" data-figure="open_tickets">{{ figures.open_tickets }}</div>
       <div class="label">{{ t('dash_open_tickets') }}</div>
-    </div>
-    <div class="tile {% if figures.overdue_tickets %}alert{% endif %}">
-      <div class="value num">{{ figures.overdue_tickets }}</div>
+    </a>
+    <a class="tile {% if figures.overdue_tickets %}alert{% endif %}" href="/tickets?overdue=1">
+      <div class="value num" data-figure="overdue_tickets">{{ figures.overdue_tickets }}</div>
       <div class="label">{{ t('dash_overdue') }}</div>
-    </div>
+    </a>
   </div>
 
   <div class="cols-2">
@@ -37,7 +37,7 @@
         <header>
           <h2>{{ t('dash_my_tickets') }}</h2>
           <div class="grow"></div>
-          <a class="btn small" href="/tickets?mine=1">{{ t('open') }}</a>
+          <a class="btn sm" href="/tickets?mine=1">{{ t('open') }}</a>
         </header>
         {% if my_tickets %}
         <table class="grid">
@@ -59,7 +59,7 @@
         <header>
           <h2>{{ t('dash_recent_calls') }}</h2>
           <div class="grow"></div>
-          <a class="btn small" href="/calls">{{ t('open') }}</a>
+          <a class="btn sm" href="/calls">{{ t('open') }}</a>
         </header>
         <table class="grid">
           <tbody>
@@ -80,31 +80,33 @@
 
     <div class="stack">
       <section class="card">
-        <header><h2>{{ t('dash_live') }}</h2></header>
+        <header>
+          <h2>{{ t('dash_live') }}</h2>
+          <div class="grow"></div>
+          <span class="muted tiny num" id="updated"></span>
+        </header>
         <div class="body">
-          {% if bridge %}
-            <div style="display:flex;align-items:center;gap:9px">
-              <span class="tag bot">{{ bridge.active_calls }}</span>
-              <span>{{ t('dash_service_ok') }}</span>
-            </div>
-          {% else %}
-            <div style="display:flex;align-items:center;gap:9px">
-              <span class="tag operator">!</span><span>{{ t('dash_service_down') }}</span>
-            </div>
-          {% endif %}
-          {% if figures.unhandled_calls %}
-            <p style="margin:12px 0 0">
-              <a class="btn small" href="/calls?unhandled=1">
-                {{ t('dash_unhandled') }}: {{ figures.unhandled_calls }}
-              </a>
-            </p>
-          {% endif %}
+          <div class="live" id="bridge-state">
+            <span class="pulse {{ '' if bridge else 'down' }}{{ ' busy' if bridge and bridge.active_calls else '' }}"></span>
+            <span id="bridge-text">
+              {%- if bridge -%}
+                {% if bridge.active_calls %}{{ bridge.active_calls }} · {% endif %}{{ t('dash_service_ok') }}
+              {%- else -%}
+                {{ t('dash_service_down') }}
+              {%- endif -%}
+            </span>
+          </div>
+          <p id="unhandled-row" class="{{ '' if figures.unhandled_calls else 'hidden' }}">
+            <a class="btn sm" href="/calls?unhandled=1">
+              {{ t('dash_unhandled') }}: <span data-figure="unhandled_calls">{{ figures.unhandled_calls }}</span>
+            </a>
+          </p>
         </div>
       </section>
 
       <section class="card">
         <header><h2>{{ t('an_by_day') }}</h2></header>
-        <div class="body">{{ ui.stacked(week.by_day, 96) }}</div>
+        <div class="body">{{ ui.stacked(week, 96) }}</div>
       </section>
 
       {% if unassigned %}

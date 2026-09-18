@@ -21,19 +21,33 @@ def call_list(
     outcome: str = "",
     day: str = "",
     unhandled: str = "",
+    page_no: int = 1,
     user: dict = Depends(current_user),
     db: sqlite3.Connection = Depends(get_db),
 ):
-    found = repo.calls(db, query=q, outcome=outcome, day=day, unhandled=bool(unhandled), limit=200)
+    """One page of calls. Deep history stays reachable, but is never rendered in one go."""
+    page_no = max(1, page_no)
+    size = 100
+    found = repo.calls(
+        db,
+        query=q,
+        outcome=outcome,
+        day=day,
+        unhandled=bool(unhandled),
+        limit=size + 1,  # one extra row tells us whether a next page exists
+        offset=(page_no - 1) * size,
+    )
     return page(
         request,
         "calls/list.html",
         user,
-        calls=found,
+        calls=found[:size],
         q=q,
         outcome=outcome,
         day=day,
         unhandled=unhandled,
+        page_no=page_no,
+        has_next=len(found) > size,
     )
 
 

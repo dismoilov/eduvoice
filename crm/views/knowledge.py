@@ -39,7 +39,14 @@ def knowledge_new(
     request: Request,
     user: dict = Depends(require_roles("supervisor", "admin")),
 ):
-    return page(request, "knowledge/edit.html", user, entry=None, versions=[])
+    return page(
+        request,
+        "knowledge/edit.html",
+        user,
+        entry=None,
+        versions=[],
+        problem=request.query_params.get("problem", ""),
+    )
 
 
 @router.post("/new")
@@ -56,7 +63,10 @@ def knowledge_create(
 ):
     require_csrf(request, csrf)
     if not faq_id.strip() or not answer.strip():
-        return redirect("/knowledge/new")
+        return redirect("/knowledge/new?problem=incomplete")
+    if repo.knowledge_by_faq_id(db, faq_id):
+        # `faq_id` is the key the assistant looks answers up by: it must stay unique.
+        return redirect("/knowledge/new?problem=duplicate")
     entry_id = repo.create_knowledge(
         db,
         faq_id=faq_id,

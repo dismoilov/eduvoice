@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui with context %}
 {% block heading %}{{ t('nav_tickets') }}{% endblock %}
-{% block topbar %}<a class="btn primary small" href="/tickets/new">{{ t('ticket_new') }}</a>{% endblock %}
+{% block topbar %}<a class="btn primary sm" href="/tickets/new">{{ t('ticket_new') }}</a>{% endblock %}
 {% block content %}
 <section class="card">
   <form class="filters auto" method="get">
-    <input type="search" name="q" value="{{ q }}" placeholder="{{ t('search') }}" style="min-width:200px">
+    <input class="wide" type="search" name="q" value="{{ q }}" placeholder="{{ t('search') }}">
     <select name="status">
       <option value="open" {% if status == 'open' %}selected{% endif %}>{{ t('status_new') }} + {{ t('status_in_progress') }}</option>
       <option value="" {% if not status %}selected{% endif %}>{{ t('all') }}</option>
@@ -13,18 +13,18 @@
         <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ t('status_' + value) }}</option>
       {% endfor %}
     </select>
-    <label class="muted" style="display:flex;gap:6px;align-items:center;font-size:13px">
-      <input type="checkbox" name="mine" value="1" {% if mine %}checked{% endif %} style="width:auto"> {{ t('ticket_mine') }}
+    <label class="check">
+      <input type="checkbox" name="mine" value="1" {% if mine %}checked{% endif %}> {{ t('ticket_mine') }}
     </label>
-    <label class="muted" style="display:flex;gap:6px;align-items:center;font-size:13px">
-      <input type="checkbox" name="unassigned" value="1" {% if unassigned %}checked{% endif %} style="width:auto"> {{ t('ticket_unassigned') }}
+    <label class="check">
+      <input type="checkbox" name="unassigned" value="1" {% if unassigned %}checked{% endif %}> {{ t('ticket_unassigned') }}
     </label>
-    <label class="muted" style="display:flex;gap:6px;align-items:center;font-size:13px">
-      <input type="checkbox" name="overdue" value="1" {% if overdue %}checked{% endif %} style="width:auto"> {{ t('dash_overdue') }}
+    <label class="check">
+      <input type="checkbox" name="overdue" value="1" {% if overdue %}checked{% endif %}> {{ t('dash_overdue') }}
     </label>
-    <button class="btn small" type="submit">{{ t('filter') }}</button>
+    <button class="btn sm" type="submit">{{ t('filter') }}</button>
     <div class="grow"></div>
-    <span class="muted num">{{ tickets|length }}</span>
+    <span class="muted num">{{ tickets|length }}{{ "+" if tickets|length >= 200 }}</span>
   </form>
 
   <table class="grid">

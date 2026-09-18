@@ -104,7 +104,7 @@ asterisk/             диалплан — исходник правды, деп
 content/              тексты: FAQ и служебные фразы (узбекский)
 deploy/               systemd-юнит
 docs/                 документация (см. ниже)
-tests/                103 теста
+tests/                113 тестов
 ```
 
 ## Быстрый старт
@@ -149,7 +149,7 @@ make panel-on PANEL_PASSWORD='пароль'            # включить пан
 ## Качество кода
 
 ```
-103 теста                 uv run pytest -q
+113 тестов                 uv run pytest -q
 линтер, формат, типы      ruff + mypy (make lint)
 ```
 

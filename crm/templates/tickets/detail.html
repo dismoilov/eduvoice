@@ -13,7 +13,7 @@
         <div><dt>{{ t('ticket_author') }}</dt><dd>{{ ticket.author_name or '—' }}</dd></div>
         <div><dt>{{ t('ticket_category') }}</dt><dd>{{ ticket.category or '—' }}</dd></div>
       </dl>
-      {% if ticket.body %}<div class="body" style="white-space:pre-wrap">{{ ticket.body }}</div>{% endif %}
+      {% if ticket.body %}<div class="body pre">{{ ticket.body }}</div>{% endif %}
     </section>
 
     <section class="card">
@@ -23,7 +23,7 @@
         <li class="{{ 'comment' if event.kind == 'comment' else '' }}">
           <div class="when num">{{ ui.when(event.created_at) }} · {{ event.author_name or '—' }} · {{ t('event_' + event.kind) }}</div>
           {% if event.kind == 'status' %}<div>{{ t('status_' + event.text) }}</div>
-          {% elif event.text %}<div style="white-space:pre-wrap">{{ event.text }}</div>{% endif %}
+          {% elif event.text %}<div class="pre">{{ event.text }}</div>{% endif %}
         </li>
         {% endfor %}
       </ul>
@@ -31,7 +31,7 @@
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <div class="field">
           <label for="text">{{ t('ticket_add_comment') }}</label>
-          <textarea id="text" name="text" style="min-height:70px"></textarea>
+          <textarea id="text" name="text" class="textarea-sm"></textarea>
         </div>
         <button class="btn" type="submit">{{ t('save') }}</button>
       </form>
@@ -70,7 +70,7 @@
         </div>
         <div class="field">
           <label for="resolution">{{ t('ticket_resolution') }}</label>
-          <textarea id="resolution" name="resolution" style="min-height:70px">{{ ticket.resolution }}</textarea>
+          <textarea id="resolution" name="resolution" class="textarea-sm">{{ ticket.resolution }}</textarea>
         </div>
         <button class="btn primary" type="submit">{{ t('save') }}</button>
       </form>
@@ -80,9 +80,9 @@
     <section class="card">
       <header><h2>{{ t('contact') }}</h2></header>
       <div class="body">
-        <div style="font-weight:600">{{ ticket.contact_name or t('unknown') }}</div>
+        <div class="strong">{{ ticket.contact_name or t('unknown') }}</div>
         <div class="mono muted">{{ ticket.contact_phone }}</div>
-        <p style="margin:12px 0 0"><a class="btn small" href="/contacts/{{ ticket.contact_id }}">{{ t('open') }}</a></p>
+        <p class="mt"><a class="btn sm" href="/contacts/{{ ticket.contact_id }}">{{ t('open') }}</a></p>
       </div>
     </section>
     {% endif %}

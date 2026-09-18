@@ -4,10 +4,10 @@
 {% block content %}
 <section class="card">
   <form class="filters" method="get">
-    <input type="search" name="q" value="{{ q }}" placeholder="{{ t('contact_phone') }} / {{ t('contact_name') }}" style="min-width:240px">
-    <button class="btn small" type="submit">{{ t('search') }}</button>
-    <a class="btn small" href="/contacts">{{ t('reset') }}</a>
-    <div class="grow"></div><span class="muted num">{{ contacts|length }}</span>
+    <input class="wide" type="search" name="q" value="{{ q }}" placeholder="{{ t('contact_phone') }} / {{ t('contact_name') }}">
+    <button class="btn sm" type="submit">{{ t('search') }}</button>
+    <a class="btn sm" href="/contacts">{{ t('reset') }}</a>
+    <div class="grow"></div><span class="muted num">{{ contacts|length }}{{ "+" if contacts|length >= 100 }}</span>
   </form>
   <table class="grid">
     <thead>

@@ -5,6 +5,7 @@
   {% if entry %}<span class="tag {{ entry.status }}">{{ t('kb_' + entry.status) }}</span>{% endif %}
 {% endblock %}
 {% block content %}
+{% if problem %}<div class="notice mb">{{ t('problem_' + problem) }}</div>{% endif %}
 <div class="cols-2">
   <section class="card">
     <form class="form body" method="post" action="{{ '/knowledge/%d'|format(entry.id) if entry else '/knowledge/new' }}">
@@ -21,7 +22,7 @@
       </div>
       <div class="field">
         <label for="answer">{{ t('kb_answer') }}</label>
-        <textarea id="answer" name="answer" style="min-height:150px">{{ entry.answer if entry else '' }}</textarea>
+        <textarea id="answer" name="answer" class="textarea-lg">{{ entry.answer if entry else '' }}</textarea>
         <div class="hint">{{ t('kb_preview') }}</div>
       </div>
       <div class="field">
@@ -57,7 +58,7 @@
             <button class="btn primary" type="submit">{{ t('kb_publish') }}</button>
           {% endif %}
         </form>
-        <p class="muted" style="margin:12px 0 0;font-size:12.5px">{{ t('kb_hint') }}</p>
+        <p class="muted tiny">{{ t('kb_hint') }}</p>
       </div>
     </section>
     {% endif %}
@@ -69,7 +70,7 @@
         {% for version in versions %}
         <li>
           <div class="when num">v{{ version.version }} · {{ ui.when(version.saved_at) }} · {{ version.author_name or '—' }}</div>
-          <div class="muted" style="font-size:12.5px">{{ version.answer[:160] }}</div>
+          <div class="muted tiny">{{ version.answer[:160] }}</div>
         </li>
         {% endfor %}
       </ul>
