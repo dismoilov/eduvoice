@@ -15,6 +15,16 @@ import yaml
 
 log = logging.getLogger("eduvoice.content")
 
+# Uzbek writes oʻ/gʻ and the tutuq belgisi with U+02BB/U+02BC, but recognition returns a
+# plain apostrophe and people type yet another one. For matching they are all the same
+# letter, so every variant is folded before keywords are compared.
+APOSTROPHES = str.maketrans({"'": "ʼ", "\u2018": "ʼ", "\u2019": "ʼ", "\u02bb": "ʼ", "`": "ʼ"})
+
+
+def fold(text: str) -> str:
+    """Lower case with every apostrophe variant folded to one."""
+    return text.lower().translate(APOSTROPHES)
+
 
 @dataclass(slots=True)
 class FaqEntry:
@@ -56,7 +66,7 @@ class Faq:
 
     def match(self, question: str) -> FaqEntry | None:
         """Keyword shortcut: the fastest possible answer, no model involved."""
-        text = question.lower()
+        text = fold(question)
         for entry in self._entries.values():
             if any(keyword and keyword in text for keyword in entry.keywords):
                 return entry
@@ -70,7 +80,7 @@ class Faq:
                 faq_id: FaqEntry(
                     faq_id=faq_id,
                     answer=" ".join(str(record.get("answer", "")).split()),
-                    keywords=[str(word).lower() for word in record.get("keywords", [])],
+                    keywords=[fold(str(word)) for word in record.get("keywords", [])],
                     source=str(record.get("source", "")),
                 )
                 for faq_id, record in records.items()

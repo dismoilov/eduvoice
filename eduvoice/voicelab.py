@@ -334,6 +334,7 @@ def build_voicelab_providers(
             settings.voicelab_api_key,
             settings.voicelab_voice_uz,
             cache_dir=settings.audio_dir / "tts-cache",
+            speed=settings.voicelab_speed,
         ),
         VoiceLabChatModel(settings.voicelab_api_key),
     )

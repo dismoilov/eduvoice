@@ -91,3 +91,12 @@ async def test_the_model_never_decides_to_hang_up_by_inventing_an_intent():
     brain = Brain(ScriptedModel({"intent": "hangup_the_call_now"}), faq=FAQ)
 
     assert (await brain.decide("savol")).action == "clarify"
+
+
+def test_an_apostrophe_never_breaks_the_fast_path():
+    """Recognition returns ta'til, the answer is filed under taʼtil: still one word."""
+    faq = Faq({"leave": FaqEntry("leave", "Akademik taʼtil javobi", keywords=["akademik taʼtil"])})
+
+    assert faq.match("Akademik ta'til qanday rasmiylashtiriladi") is not None
+    assert faq.match("akademik ta`til") is not None
+    assert faq.match("AKADEMIK TAʼTIL") is not None

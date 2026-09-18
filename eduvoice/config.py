@@ -35,6 +35,8 @@ class Settings:
     provider: Literal["fake", "voicelab"] = os.getenv("EDUVOICE_PROVIDER", "fake")  # type: ignore[assignment]
     voicelab_api_key: str = os.getenv("VOICELAB_API_KEY", "")
     voicelab_voice_uz: str = os.getenv("VOICELAB_VOICE_UZ", "")
+    # Slightly faster than default: on the phone 1.0 sounds sleepy.
+    voicelab_speed: float = _float("VOICELAB_SPEED", 1.1)
 
     # --- speech detection (tuned on real calls, see TASKS.md A13) ---------
     language: Language = "uz"  # Uzbek-only service
