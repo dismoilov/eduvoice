@@ -534,7 +534,10 @@ class CallSession:
             entry = call_as_dict(record, self._ended_reason)
             self._call_log.write_entry(entry)
             if self._store is not None:
-                self._store.save(entry)
+                # In a worker thread: this is a writer, and SQLite makes writers wait for
+                # each other for up to five seconds. On the event loop that wait would
+                # stop the audio pacer, and every *other* caller would hear the gap.
+                await asyncio.to_thread(self._store.save, entry)
         log.info(
             "call %s ended after %.1f s, %d turns (%s)",
             self.call_id or "unknown",

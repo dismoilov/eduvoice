@@ -52,6 +52,10 @@ def dashboard_data(
     bridge = bridge_health()
     return {
         "figures": figures,
+        # The chart is refreshed with the tiles. Left out, it kept the numbers it was
+        # rendered with, so after ten minutes on an open tab a tile could read "12 calls
+        # today" directly above a column showing five.
+        "week": stats.calls_by_day(db, days=7),
         "bridge": {"up": bridge is not None, "active_calls": (bridge or {}).get("active_calls", 0)},
         "at": time.strftime("%H:%M:%S"),
     }

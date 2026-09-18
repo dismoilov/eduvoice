@@ -169,6 +169,26 @@ document.addEventListener("keydown", (event) => {
     if (unhandledRow) unhandledRow.classList.toggle("hidden", !figures.unhandled_calls);
   }
 
+  /* Redraws the seven-day chart from the same payload as the tiles, so the two can
+     never describe different moments. The scale is recomputed here exactly as the
+     template computes it: heights are a share of the busiest day. */
+  function redrawWeek(week) {
+    const chart = document.getElementById("week-chart");
+    if (!chart || !Array.isArray(week) || !week.length) return;
+    const columns = chart.querySelectorAll(".col");
+    if (columns.length !== week.length) return;
+    const top = Math.max(1, ...week.map((day) => day.calls || 0));
+    week.forEach((day, index) => {
+      const column = columns[index];
+      const share = (value) => `${Math.round(((value || 0) / top) * 1000) / 10}%`;
+      ["dropped", "operator", "bot"].forEach((kind) => {
+        const bar = column.querySelector(`.seg-bar.${kind}`);
+        if (bar) bar.style.height = share(day[kind]);
+      });
+      column.title = `${day.label}: ${day.calls}`;
+    });
+  }
+
   async function refresh() {
     try {
       const response = await fetch("/api/dashboard", { headers: { Accept: "application/json" } });
@@ -179,6 +199,7 @@ document.addEventListener("keydown", (event) => {
       if (!response.ok) return;
       const data = await response.json();
       apply(data.figures);
+      redrawWeek(data.week);
       if (state) {
         const pulse = state.querySelector(".pulse");
         pulse.className = `pulse${data.bridge.up ? (data.bridge.active_calls ? " busy" : "") : " down"}`;

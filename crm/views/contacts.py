@@ -31,6 +31,7 @@ def _when(raw: str) -> str:
             continue
     return (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%d %H:%M")
 
+
 # Only these two messages can appear: the value arrives in the URL.
 NOTICES = {"call_back_started": "call_back_started", "call_back_failed": "call_back_failed"}
 KINDS = ("applicant", "student", "parent", "other")

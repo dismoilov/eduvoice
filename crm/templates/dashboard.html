@@ -19,10 +19,10 @@
     </div>
     <div class="tile">
       <div class="value num" data-figure="avg_answer_ms" data-format="ms">{{ ui.ms(figures.avg_answer_ms) }}</div>
-      {% if figures.slowest_answer_ms and figures.slowest_answer_ms > figures.avg_answer_ms %}
-      <div class="muted tight">{{ t('dash_slowest') }}: {{ ui.ms(figures.slowest_answer_ms) }}</div>
-      {% endif %}
       <div class="label">{{ t('dash_avg') }}</div>
+      {% if figures.slowest_answer_ms and figures.slowest_answer_ms > figures.avg_answer_ms %}
+      <div class="label muted">{{ t('dash_slowest') }}: {{ ui.ms(figures.slowest_answer_ms) }}</div>
+      {% endif %}
     </div>
     <a class="tile" href="/tickets?status=open">
       <div class="value num" data-figure="open_tickets">{{ figures.open_tickets }}</div>
@@ -109,7 +109,7 @@
 
       <section class="card">
         <header><h2>{{ t('an_by_day') }}</h2></header>
-        <div class="body">{{ ui.stacked(week, 96) }}</div>
+        <div class="body" id="week-chart">{{ ui.stacked(week, 96) }}</div>
       </section>
 
       {% if callbacks %}

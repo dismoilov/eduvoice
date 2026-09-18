@@ -280,6 +280,11 @@ def migrate(connection: sqlite3.Connection) -> int:
     The version is read inside the same `BEGIN IMMEDIATE` that applies the step, so the
     bridge and the CRM starting together cannot both decide to apply the same one.
     """
+    # The common case by far: nothing to do. Checked before taking the write lock, or
+    # every call the bridge saves would queue behind whatever the CRM is writing.
+    if int(connection.execute("PRAGMA user_version").fetchone()[0]) >= len(MIGRATIONS):
+        return len(MIGRATIONS)
+
     while True:
         connection.execute("BEGIN IMMEDIATE")
         try:

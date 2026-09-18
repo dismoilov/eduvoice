@@ -13,6 +13,9 @@ import statistics
 from datetime import date, timedelta
 from typing import Any
 
+# How a call ended, rather than what it was about: these never belong in the topics chart.
+NOT_A_TOPIC = ("operator", "goodbye", "tech_problem", "unclear", "unclear_twice", "limit_reached")
+
 
 def _rank(count: int, share: float) -> int:
     """Nearest-rank index for a percentile.
@@ -202,16 +205,20 @@ def analytics(db: sqlite3.Connection, days: int = 14) -> dict[str, Any]:
             dict(row)
             for row in db.execute(
                 """
+                -- What citizens asked about, which is not the same as how the call
+                -- ended. Mixed together, "could not understand" and "wanted an operator"
+                -- sat in the chart as though they were subjects, and a supervisor
+                -- deciding which answer to write next could not tell one from the other.
                 SELECT CASE WHEN t.faq_id != '' THEN t.faq_id ELSE t.intent END AS topic,
                        count(*) AS count,
                        count(DISTINCT c.contact_id) AS people,
-                       t.faq_id != '' AS answered,
                        round(avg(nullif(t.total_ms, 0))) AS avg_ms
                 FROM turns t JOIN calls c ON c.id = t.call_id
                 WHERE substr(c.started_at,1,10) >= ? AND t.question != ''
+                  AND t.intent NOT IN ({NOT_TOPIC_PLACEHOLDERS})
                 GROUP BY topic ORDER BY count DESC LIMIT 10
-                """,
-                (since,),
+                """.format(NOT_TOPIC_PLACEHOLDERS=",".join("?" * len(NOT_A_TOPIC))),
+                (since, *NOT_A_TOPIC),
             )
         ],
         "questions": [
