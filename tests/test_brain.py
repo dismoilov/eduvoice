@@ -119,3 +119,24 @@ def test_keywords_from_the_file_survive_the_apostrophe_the_recogniser_uses(tmp_p
 
     for spelling in ("koʻchirish haqida", "ko'chirish haqida", "KOʻCHIRISH"):
         assert faq.match(spelling) is not None, f"{spelling!r} did not reach the answer"
+
+
+async def test_an_answer_published_with_no_text_sends_the_caller_to_a_person():
+    """A supervisor clearing the answer field is one keystroke away at any moment.
+
+    The keyword shortcut used to take it, and `_speak("")` writes nothing at all — so the
+    caller heard the greeting, asked their question, and got pure silence. Hearing nothing
+    wrong they would ask again, get silence again, and be hung up on without ever reaching
+    a human. Silence is the one thing this system must never do.
+    """
+    from eduvoice.content import Faq, FaqEntry
+
+    faq = Faq({"stipend": FaqEntry(faq_id="stipend", answer="   ", keywords=["stipendiya"])})
+    from eduvoice.fakes import FakeChatModel
+
+    brain = Brain(FakeChatModel(), faq=faq, timeout_s=1.0)
+
+    decision = await brain.decide("stipendiya qanday olinadi", turn_index=0)
+
+    assert decision.action == "transfer"
+    assert decision.intent == "empty_answer"

@@ -84,9 +84,15 @@ class Brain:
         if not question.strip():
             return self._unclear("empty")
 
-        # Fast path: an obvious keyword match skips the model entirely (about a second saved).
+        if turn_index >= self._max_turns:
+            return Decision(action="transfer", intent="limit_reached")
+
+        # Fast path: an obvious keyword match skips the model entirely (about a second
+        # saved). An answer with no text in it is not taken: the caller would hear pure
+        # silence and, hearing nothing wrong, would wait through it and then be hung up
+        # on. A person is the right answer to an answer we do not have.
         shortcut = self._faq_source.match(question)
-        if shortcut is not None:
+        if shortcut is not None and shortcut.answer.strip():
             self.unclear_streak = 0
             return Decision(
                 action="faq",
@@ -95,9 +101,9 @@ class Brain:
                 faq_id=shortcut.faq_id,
                 source=shortcut.source,
             )
-
-        if turn_index >= self._max_turns:
-            return Decision(action="transfer", intent="limit_reached")
+        if shortcut is not None:
+            log.warning("faq %s is published with an empty answer -> operator", shortcut.faq_id)
+            return Decision(action="transfer", intent="empty_answer")
 
         messages = [
             ChatMessage("system", SYSTEM_PROMPT + "\n" + self._faq_catalogue()),

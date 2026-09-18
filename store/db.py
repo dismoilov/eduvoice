@@ -17,6 +17,7 @@ order, and running them again is a no-op.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sqlite3
 import threading
@@ -297,7 +298,11 @@ def migrate(connection: sqlite3.Connection) -> int:
             connection.execute(f"PRAGMA user_version={version + 1}")
             connection.execute("COMMIT")
         except BaseException:
-            connection.execute("ROLLBACK")
+            # SQLite may have aborted the transaction itself — on a full disk, say — and
+            # then ROLLBACK raises "no transaction is active", which is what the operator
+            # would have seen instead of "the disk is full".
+            with contextlib.suppress(sqlite3.Error):
+                connection.execute("ROLLBACK")
             raise
 
 

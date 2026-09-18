@@ -266,3 +266,32 @@ async def test_an_answer_that_is_not_a_json_object_is_a_clean_error():
     with pytest.raises(LlmError):
         await model.complete_json([ChatMessage("user", "salom")], timeout_s=2)
     await model.close()
+
+
+async def test_a_reply_that_is_not_audio_at_all_is_a_tts_error(tmp_path):
+    """A captive portal, a gateway error page, a truncated download.
+
+    `wave.open` raises `wave.Error` or `EOFError` on these, and neither is one of the
+    three errors the bridge knows how to turn into "a person will help you".
+    """
+    for body in (b"<html>gateway timeout</html>", b"", b"RIFF-but-cut"):
+        speech = VoiceLabTextToSpeech("key", "voice_1", cache_dir=tmp_path)
+        speech._client = service(lambda _r, b=body: httpx.Response(200, content=b))
+        with pytest.raises(TtsError):
+            [chunk async for chunk in speech.stream("salom", "uz")]
+        await speech.close()
+    assert list(tmp_path.glob("*.pcm")) == []
+
+
+async def test_a_model_reply_with_no_text_in_it_is_an_llm_error():
+    """Some gateways answer with `null`, or with a list of content blocks."""
+    for content in (None, [{"type": "text", "text": "salom"}], 42):
+        model = VoiceLabChatModel("key")
+        model._client = service(
+            lambda _r, c=content: httpx.Response(
+                200, json={"choices": [{"message": {"content": c}}]}
+            )
+        )
+        with pytest.raises(LlmError):
+            await model.complete_json([ChatMessage("user", "salom")], timeout_s=2)
+        await model.close()

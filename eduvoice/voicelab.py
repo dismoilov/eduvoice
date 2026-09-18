@@ -30,6 +30,7 @@ import hashlib
 import io
 import json
 import logging
+import os
 import time
 import uuid
 import wave
@@ -78,14 +79,21 @@ def _pcm_from_wav(data: bytes) -> bytes:
     speed — and, worse, would be written into the cache under the text's hash and replayed
     to every future caller. Refusing it hands this caller to a person instead.
     """
-    with wave.open(io.BytesIO(data), "rb") as handle:
-        rate, channels, width = handle.getframerate(), handle.getnchannels(), handle.getsampwidth()
-        if (rate, channels, width) != (SAMPLE_RATE_TTS, 1, 2):
-            raise TtsError(
-                f"synthesis returned {rate} Hz, {channels} channel(s), {width * 8}-bit; "
-                f"expected {SAMPLE_RATE_TTS} Hz mono 16-bit"
-            )
-        return handle.readframes(handle.getnframes())
+    try:
+        with wave.open(io.BytesIO(data), "rb") as handle:
+            rate = handle.getframerate()
+            channels, width = handle.getnchannels(), handle.getsampwidth()
+            if (rate, channels, width) != (SAMPLE_RATE_TTS, 1, 2):
+                raise TtsError(
+                    f"synthesis returned {rate} Hz, {channels} channel(s), {width * 8}-bit; "
+                    f"expected {SAMPLE_RATE_TTS} Hz mono 16-bit"
+                )
+            return handle.readframes(handle.getnframes())
+    except (wave.Error, EOFError) as exc:
+        # A proxy page, an empty body, a truncated download: anything but audio. Raised as
+        # our own error this becomes "a person will help you"; raised as `wave.Error` it
+        # would reach the bridge as an unexpected crash.
+        raise TtsError(f"synthesis did not return audio: {exc}") from exc
 
 
 def _nothing_heard() -> Transcript:
@@ -272,7 +280,9 @@ class VoiceLabTextToSpeech:
         """Written through a temporary file: a reader never sees half a phrase."""
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = path.with_suffix(".tmp")
+            # Qualified by process: `prewarm` and the bridge can synthesise the same
+            # phrase at the same moment, and one must not rename the other's half-file.
+            temporary = path.with_suffix(f".{os.getpid()}.tmp")
             temporary.write_bytes(pcm)
             temporary.replace(path)
         except OSError as exc:  # a read-only disk must not break a call
@@ -324,6 +334,9 @@ class VoiceLabChatModel:
             content = _body(response)["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise LlmError(f"unexpected reply shape: {exc}") from exc
+        if not isinstance(content, str):
+            # Some gateways answer with `null`, or with a list of content blocks.
+            raise LlmError(f"the model's reply was {type(content).__name__}, not text")
         return _as_json(content)
 
     async def close(self) -> None:

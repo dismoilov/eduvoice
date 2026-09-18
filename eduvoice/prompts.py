@@ -61,7 +61,7 @@ class PromptLibrary:
             if prompt_id in self._audio:  # another call synthesised it while we waited
                 return self._audio[prompt_id]
             pcm = self._from_disk(prompt_id)
-            if pcm is None:
+            if not pcm:  # missing, or an empty file left by a failed write
                 chunks = [chunk async for chunk in tts.stream(self.text(prompt_id), language)]
                 pcm = resample(b"".join(chunks), SAMPLE_RATE_TTS, SAMPLE_RATE_TELEPHONY)
                 self._to_disk(prompt_id, pcm)

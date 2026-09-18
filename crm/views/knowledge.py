@@ -120,6 +120,10 @@ def knowledge_save(
     db: sqlite3.Connection = Depends(get_db),
 ):
     require_csrf(request, csrf)
+    if not answer.strip():
+        # An empty answer is not an answer: the assistant would play silence down the
+        # line, and the caller would sit through it twice before being hung up on.
+        return redirect(f"/knowledge/{entry_id}?problem=empty_answer")
     repo.update_knowledge(
         db,
         entry_id,

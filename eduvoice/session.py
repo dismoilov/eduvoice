@@ -204,7 +204,22 @@ class CallSession:
             return
 
         if self._state == "thinking":
-            return  # audio during thinking is dropped on purpose: the answer is coming
+            # Silence while the answer is being prepared: nothing to interrupt, and the
+            # caller's own thinking-aloud must not be mistaken for a new question.
+            if not self._out.speaking:
+                return
+            # The filler is playing, so the caller *is* being spoken to and may cut in —
+            # very often to say "never mind, put me through to a person". Dropping these
+            # frames meant they were ignored, and by the time the answer began their
+            # words had been thrown away.
+            self._recent.append(frame)
+            if self._barge.push(frame):
+                log.info("call %s: barge-in over the filler", self.call_id)
+                await self._stop_thinking()
+                self._listen()
+                self._speech.seed(list(self._recent))
+                self._recent.clear()
+            return
 
         utterance = self._speech.push(frame)
         if utterance is not None:
@@ -237,7 +252,12 @@ class CallSession:
 
     def _speak(self, text: str, prompt_id: str | None = None) -> None:
         self._state = "greeting" if prompt_id == "greeting" else "speaking"
-        self._barge.playback_started()
+        # Only disarm while the line is actually silent. The filler ("one moment, I am
+        # checking") is written straight to the output and can still be playing here —
+        # disarming then left the caller listening to us and unable to say "no, put me
+        # through to a person", and by the time the answer began, their words were gone.
+        if not self._out.speaking:
+            self._barge.playback_started()
         self._recent.clear()
         self._speak_task = asyncio.create_task(self._run_speech(text, prompt_id))
 
@@ -325,6 +345,20 @@ class CallSession:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
 
+    async def _stop_thinking(self) -> None:
+        """The caller spoke over the filler: drop it and abandon the turn in flight.
+
+        The answer being prepared is to a question they have moved on from, so finishing
+        it would talk over them a second time.
+        """
+        self._out.clear()
+        self._cancel_filler()
+        task, self._think_task = self._think_task, None
+        if task is not None and task is not asyncio.current_task():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
     # ------------------------------------------------------------ thinking
 
     def _think(self, utterance: Utterance) -> None:
@@ -343,6 +377,8 @@ class CallSession:
             pcm = await self._prompts.audio("filler", self._tts)
             if self._state == "thinking":  # the answer may have arrived while synthesising
                 self._out.write(pcm)
+                # The caller can hear this, so they may interrupt it.
+                self._barge.playback_audible()
 
     async def _run_turn(self, utterance: Utterance) -> None:
         """One turn: recognise, decide, act. Any failure hands the caller to a human.
@@ -372,6 +408,17 @@ class CallSession:
                     "call %s: %d utterances in a row could not be recognised -> operator",
                     self.call_id,
                     self._unheard,
+                )
+                # Written down, or the operator picks up a call whose card is blank and
+                # has no way to know the caller had been trying to speak for a minute.
+                self._registry.ensure(self.call_id).turns.append(
+                    Turn(
+                        question="",
+                        answer=self._prompts.text("transfer"),
+                        intent="not_recognised",
+                        action="transfer",
+                        at_ms=max(0.0, (time.monotonic() - self._started) * 1000),
+                    )
                 )
                 await self._finish("operator", "transfer")
                 return
@@ -455,6 +502,13 @@ class CallSession:
                 self._note_spoken(prompt)
                 self._speak_prompt(prompt)
             case _:
+                if not decision.text.strip():
+                    # Nothing to say is not something to say. Reaching here would play
+                    # silence at the caller, who has no way to know anything went wrong.
+                    log.warning("call %s: decision carried no text -> operator", self.call_id)
+                    self._note_spoken("transfer")
+                    await self._finish("operator", "transfer")
+                    return
                 self._last_answer = decision.text
                 self._speak(decision.text)
 

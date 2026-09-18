@@ -6,7 +6,9 @@ a turn, a crash before cleanup, and a dead audio socket — and none of them wer
 """
 
 import asyncio
+import contextlib
 import uuid
+from dataclasses import replace
 
 import pytest
 
@@ -49,7 +51,7 @@ class ExplodingWriter(StubWriter):
         await asyncio.sleep(0)
 
 
-def build(model, writer=None, prompts=None):
+def build(model, writer=None, prompts=None, config=None):
     reader = asyncio.StreamReader()
     writer = writer or StubWriter()
     registry = CallRegistry()
@@ -63,7 +65,7 @@ def build(model, writer=None, prompts=None):
         brain=Brain(model, faq={}, timeout_s=0.5),
         prompts=PromptLibrary(prompts or PROMPTS),
         registry=registry,
-        config=CONFIG,
+        config=config or CONFIG,
         speech_detector=SpeechDetector(CONFIG, speech_test=is_speech_frame),
         barge_detector=BargeInDetector(CONFIG, speech_test=is_speech_frame),
     )
@@ -220,3 +222,39 @@ async def test_a_long_answer_is_given_time_to_be_synthesised():
     assert regulation > short + 2, "a 300-character answer got no more time than a greeting"
     # Measured on the live service: 214 characters took 1.40 s end to end.
     assert session._first_chunk_budget("A" * 214) > 1.4
+
+
+class SlowChatModel:
+    """Takes long enough that the filler is played while the caller waits."""
+
+    async def complete_json(self, messages: list[ChatMessage], timeout_s: float) -> dict:
+        await asyncio.sleep(0.6)
+        return {"intent": "faq", "faq_id": "stipend"}
+
+
+async def test_the_caller_can_interrupt_the_filler_they_are_listening_to():
+    """ "One moment, I am checking" is the assistant speaking, so it can be spoken over.
+
+    Frames arriving while the answer was being prepared were dropped, and the guard was
+    disarmed at the same moment — so a caller saying "never mind, put me through to a
+    person" over the filler was ignored twice: once while they spoke, and again when
+    their words were thrown away before the answer began.
+    """
+    call_id = str(uuid.uuid4())
+    quick_filler = replace(CONFIG, filler_after_s=0.05)
+    reader, _writer, _registry, session = build(SlowChatModel(), config=quick_filler)
+    reader.feed_data(encode(0x01, uuid.UUID(call_id).bytes))
+
+    task = asyncio.create_task(session.run())
+    await ask(reader, session)
+    await wait_for(lambda: session.state == "thinking")
+    await wait_for(lambda: session._out.speaking, timeout=4)  # the filler is being played
+
+    for frame in [SPEECH] * 30:  # the caller cuts in over it
+        reader.feed_data(encode(0x10, frame))
+    await wait_for(lambda: session.state == "listening", timeout=4)
+
+    assert session._think_task is None, "the abandoned turn was left running"
+    reader.feed_eof()
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(task, timeout=5)
