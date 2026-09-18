@@ -65,12 +65,24 @@ class Faq:
         return self._entries.get(faq_id)
 
     def match(self, question: str) -> FaqEntry | None:
-        """Keyword shortcut: the fastest possible answer, no model involved."""
+        """Keyword shortcut: the fastest possible answer, no model involved.
+
+        The longest matching keyword wins, not the first one found. Order used to decide
+        it, and the general answer is always written before the particular one, so
+        "akademik taʼtilda stipendiya toʻlanadimi" — is a stipend paid during academic
+        leave — matched the plain keyword "stipendiya" and the caller was read the general
+        rule about stipends instead of the rule that answers their question. Length is a
+        fair measure of how specific a keyword is: "akademik taʼtilda stipendiya" says
+        more than "stipendiya", and it says it about the same question.
+        """
         text = fold(question)
+        best: FaqEntry | None = None
+        best_length = 0
         for entry in self._entries.values():
-            if any(keyword and keyword in text for keyword in entry.keywords):
-                return entry
-        return None
+            for keyword in entry.keywords:
+                if keyword and keyword in text and len(keyword) > best_length:
+                    best, best_length = entry, len(keyword)
+        return best
 
     @classmethod
     def from_records(cls, records: dict[str, dict]) -> Faq:

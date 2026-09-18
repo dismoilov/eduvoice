@@ -1,8 +1,8 @@
 """Bridge entry point: AudioSocket server + control API for the dialplan.
 
 Providers are chosen by EDUVOICE_PROVIDER: `fake` runs the whole call flow without any API
-key, `voicelab` uses person B's module (eduvoice/voicelab.py, see PLAN.md section 7).
-Nothing else in the code changes between the two.
+key, `voicelab` talks to the real service through eduvoice/voicelab.py. Nothing else in
+the code changes between the two.
 
 Each call gets its own provider objects on purpose: VoiceLab's realtime sockets are
 per-conversation, and one call's broken socket must not affect anybody else's call.
@@ -32,7 +32,7 @@ log = logging.getLogger("eduvoice")
 def build_providers() -> tuple[SpeechToText, TextToSpeech, ChatModel]:
     """Speech-to-text, text-to-speech and the language model for one call."""
     if settings.provider == "voicelab":
-        from eduvoice.voicelab import build_voicelab_providers  # person B's module
+        from eduvoice.voicelab import build_voicelab_providers
 
         return build_voicelab_providers(settings)
 

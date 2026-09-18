@@ -33,7 +33,7 @@ academic_leave:
   source: "Vazirlar Mahkamasining 2021-yil 3-iyundagi 344-son qarori, 2, 7 va 10-bandlar"
 
 academic_leave_duration:
-  keywords: [taʼtil muddati, qancha muddat, taʼtil qancha]
+  keywords: [taʼtil qancha muddat, taʼtil muddati, qancha muddat, taʼtil qancha]
   answer: >-
     Sogʻliq holati yoki oila aʼzosini parvarish qilish boʻyicha akademik taʼtil keyingi
     toʻliq boʻlmagan semestr boshlanishigacha beriladi. Harbiy xizmat hamda homiladorlik

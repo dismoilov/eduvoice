@@ -1,6 +1,6 @@
 """Stand-ins for the VoiceLab providers.
 
-They let the whole call flow run before person B delivers eduvoice/voicelab/:
+They let the whole call flow run with no key and no network, which is how the tests run:
 same interfaces, no API key, no network. Switch with EDUVOICE_PROVIDER=fake|voicelab.
 """
 

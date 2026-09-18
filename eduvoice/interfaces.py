@@ -1,4 +1,4 @@
-"""Contracts between the bridge (person A) and the VoiceLab module (person B).
+"""The contract between the bridge and whatever provides speech and a model.
 
 Audio formats are fixed here and must not change silently:
 
