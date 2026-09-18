@@ -56,6 +56,8 @@ def test_every_faq_answer_is_speakable():
 @pytest.fixture
 async def bridge(tmp_path, monkeypatch):
     """The real servers on random ports, with a temporary prompt cache and call log."""
+    # Hermetic on purpose: a developer's .env may point the bridge at the real provider.
+    monkeypatch.setattr(settings, "provider", "fake")
     monkeypatch.setattr(settings, "call_log_dir", tmp_path / "logs")
     monkeypatch.setattr(settings, "audio_dir", tmp_path / "audio")
     monkeypatch.setenv("EDUVOICE_FAKE_STT", "operator bilan gaplashmoqchiman")

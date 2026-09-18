@@ -1,25 +1,57 @@
-# Frequently asked questions, Uzbek only.
-# DRAFT — every answer must be checked against the regulations on lex.uz before the demo.
-# `keywords` let the bridge answer without the language model when the match is obvious.
-
-transfer_university:
-  keywords: [koʻchirish, koʻchmoqchi, boshqa universitet, boshqa oliy]
-  answer: >-
-    Boshqa oliy taʼlim muassasasiga oʻqishni koʻchirish uchun oʻquv yili boshlanishidan oldin
-    ariza topshiriladi. Aniq muddat va hujjatlar roʻyxatini universitetingiz devonxonasidan
-    aniqlang.
-  source: "QORALAMA — hujjat va band raqami toʻldirilishi kerak"
+# Ответы ассистента, узбекский язык.
+#
+# Источник правды на работающем сервере — база знаний CRM (таблица `knowledge`).
+# Этот файл нужен для установки с нуля и как резерв, если база недоступна.
+# Загрузить в базу: uv run python -m crm.cli import-knowledge content/faq.yaml --publish --update
+#
+# Каждый ответ сверен с действующим документом на lex.uz; в `source` — номер документа,
+# дата и пункты. Устаревшее положение 393-сон от 20.06.2017 силы не имеет с 15.09.2025,
+# вместо него действует 578-сон от 13.09.2025.
 
 stipend:
-  keywords: [stipendiya, stipendiyani, nafaqa]
+  keywords: [stipendiya, stipendiyani, nafaqa, stipendiya qachon]
   answer: >-
-    Stipendiya davlat granti asosida oʻqiyotgan va imtihonlarni muvaffaqiyatli topshirgan
-    talabalarga beriladi. Miqdori va toʻlov tartibi universitet buyrugʻi bilan belgilanadi.
-  source: "QORALAMA — hujjat va band raqami toʻldirilishi kerak"
+    Stipendiya davlat granti asosida kunduzgi taʼlimda oʻqiyotgan va imtihonlarni
+    muvaffaqiyatli topshirgan talabalarga har oyda toʻlanadi. Stipendiya universitetning
+    stipendiya komissiyasi taqdimnomasi asosida rektor buyrugʻi bilan tayinlanadi.
+  source: "Vazirlar Mahkamasining 2020-yil 31-yanvardagi 59-son qarori, 6, 21 va 22-bandlar"
+
+stipend_academic_leave:
+  keywords: [akademik taʼtilda stipendiya, taʼtil stipendiya, taʼtilda stipendiya]
+  answer: >-
+    Akademik taʼtil davrida stipendiya toʻlanmaydi. Taʼtil tugab, oʻqish tiklangandan
+    keyin stipendiya umumiy tartibda qayta tayinlanadi.
+  source: "Vazirlar Mahkamasining 2021-yil 3-iyundagi 344-son qarori, 5-band"
 
 academic_leave:
-  keywords: [akademik taʼtil, taʼtil olish, sogʻligʻim]
+  keywords: [akademik taʼtil, taʼtil olish, akademik tatil, sogʻligʻim]
   answer: >-
-    Akademik taʼtil sogʻliq holati yoki boshqa uzrli sabablarga koʻra tibbiy hujjat asosida
-    beriladi. Ariza va hujjatlar universitet rektorati nomiga topshiriladi.
-  source: "QORALAMA — hujjat va band raqami toʻldirilishi kerak"
+    Akademik taʼtil harbiy xizmat, sogʻliq holati, homiladorlik va tugʻruq, bola
+    parvarishi hamda oila aʼzosini parvarish qilish asoslarida beriladi. Buning uchun
+    ariza va asosni tasdiqlovchi hujjat — chaqiruv qogʻozi yoki tibbiy xulosa —
+    topshiriladi. Taʼtil rektor buyrugʻi bilan rasmiylashtiriladi.
+  source: "Vazirlar Mahkamasining 2021-yil 3-iyundagi 344-son qarori, 2, 7 va 10-bandlar"
+
+academic_leave_duration:
+  keywords: [taʼtil muddati, qancha muddat, taʼtil qancha]
+  answer: >-
+    Sogʻliq holati yoki oila aʼzosini parvarish qilish boʻyicha akademik taʼtil keyingi
+    toʻliq boʻlmagan semestr boshlanishigacha beriladi. Harbiy xizmat hamda homiladorlik
+    va bola parvarishi boʻyicha muddat qonun hujjatlarida belgilangan tartibda belgilanadi.
+  source: "Vazirlar Mahkamasining 2021-yil 3-iyundagi 344-son qarori, 3-band"
+
+transfer_university:
+  keywords: [koʻchirish, koʻchmoqchi, boshqa universitet, boshqa oliy, kochirish]
+  answer: >-
+    Oʻqishni boshqa oliy taʼlim tashkilotiga koʻchirish faqat mos yoki turdosh taʼlim
+    yoʻnalishi boʻyicha amalga oshiriladi. Arizalar oʻquv yilining akademik kanikullari
+    davrida qabul qilinadi.
+  source: "Vazirlar Mahkamasining 2025-yil 13-sentyabrdagi 578-son qarori, 3-ilova, 15 va 18-bandlar"
+
+transfer_documents:
+  keywords: [koʻchirish hujjat, qanday hujjat, hujjatlar roʻyxati, hujjat topshirish]
+  answer: >-
+    Oʻqishni koʻchirish uchun ariza, oʻqish haqida maʼlumotnoma va akademik maʼlumotnoma
+    topshiriladi. Qaror qabul komissiyasi taqdimnomasi asosida rektor tomonidan qabul
+    qilinadi.
+  source: "Vazirlar Mahkamasining 2025-yil 13-sentyabrdagi 578-son qarori, 3-ilova, 19 va 20-bandlar"

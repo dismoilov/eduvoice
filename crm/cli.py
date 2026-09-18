@@ -46,11 +46,35 @@ def import_knowledge(args: argparse.Namespace) -> int:
     db = open_database(settings.db_path)
     raw = yaml.safe_load(Path(args.file).read_text(encoding="utf-8")) or {}
     author = repo.users(db)
-    author_id = int(author[0]["id"]) if author else None
-    added = 0
+    author_id = int(author[0]["id"]) if author else 0  # 0 = imported before anyone signed in
+    added = updated = 0
     with transaction(db):
         for faq_id, item in raw.items():
-            if db.execute("SELECT 1 FROM knowledge WHERE faq_id = ?", (faq_id,)).fetchone():
+            answer = " ".join(str(item.get("answer", "")).split())
+            keywords = ", ".join(str(word) for word in item.get("keywords", []))
+            source = str(item.get("source", ""))
+            existing = db.execute(
+                "SELECT id, answer, keywords, source FROM knowledge WHERE faq_id = ?", (faq_id,)
+            ).fetchone()
+            if existing:
+                if not args.update:
+                    continue
+                if (existing["answer"], existing["keywords"], existing["source"]) == (
+                    answer,
+                    keywords,
+                    source,
+                ):
+                    continue
+                repo.update_knowledge(
+                    db,
+                    int(existing["id"]),
+                    author_id,
+                    answer=answer,
+                    keywords=keywords,
+                    source=source,
+                    status="published" if args.publish else "draft",
+                )
+                updated += 1
                 continue
             db.execute(
                 "INSERT INTO knowledge (faq_id, question, answer, keywords, source, status,"
@@ -58,9 +82,9 @@ def import_knowledge(args: argparse.Namespace) -> int:
                 " VALUES (?, '', ?, ?, ?, ?, 1, ?, ?, ?)",
                 (
                     faq_id,
-                    " ".join(str(item.get("answer", "")).split()),
-                    ", ".join(str(word) for word in item.get("keywords", [])),
-                    str(item.get("source", "")),
+                    answer,
+                    keywords,
+                    source,
                     "published" if args.publish else "draft",
                     author_id,
                     now(),
@@ -68,7 +92,8 @@ def import_knowledge(args: argparse.Namespace) -> int:
                 ),
             )
             added += 1
-    print(f"imported {added} answers ({'published' if args.publish else 'draft'})")
+    state = "published" if args.publish else "draft"
+    print(f"imported {added} new and updated {updated} answers ({state})")
     return 0
 
 
@@ -105,6 +130,9 @@ def main(argv: list[str] | None = None) -> int:
     knowledge = commands.add_parser("import-knowledge", help="load content/faq.yaml")
     knowledge.add_argument("file")
     knowledge.add_argument("--publish", action="store_true")
+    knowledge.add_argument(
+        "--update", action="store_true", help="also refresh answers that already exist"
+    )
     knowledge.set_defaults(run=import_knowledge)
 
     copy = commands.add_parser("backup", help="copy the database to a file")
