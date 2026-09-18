@@ -2,7 +2,7 @@ SERVER ?= root@10.103.10.86
 REMOTE ?= /opt/eduvoice/app
 SSH ?= ssh -o PubkeyAuthentication=no
 
-.PHONY: install lint test check deploy deploy-dialplan logs restart status call-test barge-test say agent-on agent-off calls hangup-all crm-logs crm-restart crm-user backup
+.PHONY: voice-prewarm sql install lint test check deploy deploy-dialplan logs restart status call-test barge-test say agent-on agent-off calls hangup-all crm-logs crm-restart crm-user backup
 
 install:            ## local environment
 	uv sync
@@ -44,6 +44,13 @@ USER_EXT ?=
 
 backup:             ## consistent copy of the CRM database, kept on the server
 	$(SSH) $(SERVER) 'cd $(REMOTE) && /usr/local/bin/uv run --no-sync python -m crm.cli backup /opt/eduvoice/data/backup-$$(date +%Y%m%d-%H%M).db && ls -lh /opt/eduvoice/data/*.db | tail -3'
+
+voice-prewarm:      ## synthesise every phrase and answer into the cache (ARGS=--dry-run to only count)
+	$(SSH) $(SERVER) 'cd $(REMOTE) && /usr/local/bin/uv run --no-sync python -m eduvoice.voice_tools prewarm $(ARGS)'
+
+sql:                ## make sql Q="select count(*) from calls" — the system sqlite3 cannot read this database
+	@test -n "$(Q)" || (echo 'usage: make sql Q="select ..."' && false)
+	$(SSH) $(SERVER) 'cd $(REMOTE) && /usr/local/bin/uv run --no-sync python -m crm.cli sql "$(Q)"'
 
 crm-user:           ## make crm-user USER_LOGIN=olim USER_NAME="Olim" USER_ROLE=operator USER_PASSWORD=... USER_EXT=101
 	@test -n "$(USER_LOGIN)" -a -n "$(USER_PASSWORD)" || (echo "USER_LOGIN and USER_PASSWORD are required" && false)

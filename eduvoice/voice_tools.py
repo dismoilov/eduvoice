@@ -82,7 +82,7 @@ def ivr(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _prewarm() -> tuple[int, int, int]:
+async def _prewarm(dry_run: bool = False) -> tuple[int, int, int]:
     """Synthesises every static phrase once: service prompts and published answers.
 
     Everything lands in the on-disk cache, so a demo call spends no synthesis credits at
@@ -108,6 +108,11 @@ async def _prewarm() -> tuple[int, int, int]:
             tidy = " ".join(text.split())
             if speech._cached_path(tidy).exists():
                 continue
+            if dry_run:  # what it would cost, before spending anything
+                made += 1
+                spent += len(tidy)
+                print(f"  kerak ({len(tidy):4d} belgi): {tidy[:60]}…")
+                continue
             try:
                 async for _ in speech.stream(tidy, "uz"):
                     pass
@@ -122,9 +127,10 @@ async def _prewarm() -> tuple[int, int, int]:
     return made, failed, spent
 
 
-def prewarm(_args: argparse.Namespace) -> int:
-    made, failed, spent = asyncio.run(_prewarm())
-    print(f"\n  yangi yozildi: {made} ta ({spent} belgi) · xatolar: {failed}")
+def prewarm(args: argparse.Namespace) -> int:
+    made, failed, spent = asyncio.run(_prewarm(args.dry_run))
+    verb = "ovoz berish kerak" if args.dry_run else "yangi yozildi"
+    print(f"\n  {verb}: {made} ta ({spent} belgi) · xatolar: {failed}")
     print("  kesh: " + str(settings.audio_dir / "tts-cache"))
     return 1 if failed else 0
 
@@ -143,6 +149,9 @@ def main(argv: list[str] | None = None) -> int:
 
     warm = commands.add_parser(
         "prewarm", help="synthesise every service phrase and published answer into the cache"
+    )
+    warm.add_argument(
+        "--dry-run", action="store_true", help="only count what is missing, spend nothing"
     )
     warm.set_defaults(run=prewarm)
 

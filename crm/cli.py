@@ -111,6 +111,30 @@ def backup(args: argparse.Namespace) -> int:
     return 0
 
 
+def sql(args: argparse.Namespace) -> int:
+    """Runs one read-only query against the database.
+
+    The system `sqlite3` on this server is from 2013 and understands neither full-text
+    search nor indexes built on expressions; it answers "malformed database schema" for a
+    database that is perfectly healthy. This command uses the SQLite that ships with the
+    project's Python, so there is always a safe way to look inside.
+    """
+    db = open_database(settings.db_path)
+    if not args.query.lstrip().lower().startswith(("select", "pragma", "explain", "with")):
+        print("only read-only queries are allowed here (select / with / pragma / explain)")
+        return 1
+    rows = db.execute(args.query).fetchall()
+    if not rows:
+        print("(no rows)")
+        return 0
+    columns = rows[0].keys()
+    print(" | ".join(columns))
+    for row in rows:
+        print(" | ".join("" if row[c] is None else str(row[c]) for c in columns))
+    print(f"({len(rows)} rows)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="crm")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -138,6 +162,12 @@ def main(argv: list[str] | None = None) -> int:
     copy = commands.add_parser("backup", help="copy the database to a file")
     copy.add_argument("target")
     copy.set_defaults(run=backup)
+
+    query = commands.add_parser(
+        "sql", help="run one read-only query (the system sqlite3 is too old)"
+    )
+    query.add_argument("query")
+    query.set_defaults(run=sql)
 
     args = parser.parse_args(argv)
     return int(args.run(args))

@@ -40,6 +40,7 @@ make status        # сервисы, порты, внутренние номер
 make crm-logs      # живой лог CRM
 make crm-restart
 make backup        # согласованная копия базы
+make sql Q="select count(*) from calls"   # заглянуть в базу
 make crm-user USER_LOGIN=… USER_NAME="…" USER_ROLE=operator USER_PASSWORD=… USER_EXT=101
 make logs          # живой лог моста
 make calls         # последние звонки с задержками
@@ -50,6 +51,35 @@ make say TEXT="…"  # что «услышит» заглушка распозн
 make call-test     # смоделировать звонок с вопросом
 make barge-test    # смоделировать перебивание
 make agent-on/off  # подставной оператор в очереди
+
+make voice-prewarm # озвучить все фразы и ответы один раз, в кэш
+```
+
+### Почему в базу нельзя ходить системным `sqlite3`
+
+На сервере стоит Sangoma Linux 7, и `sqlite3` в нём — версии 3.7.17 от 2013 года. Он не
+знает ни полнотекстового поиска, ни индексов по выражениям, и на совершенно исправную
+базу отвечает так:
+
+```
+Error: malformed database schema (calls_day) - near "(": syntax error
+```
+
+База при этом цела: приложение работает с той же базой через SQLite 3.53, который идёт
+вместе с Python проекта. Поэтому смотреть в базу нужно через `make sql` — он использует
+правильную библиотеку и разрешает только чтение. Резервная копия (`make backup`) делается
+тем же способом и от старой утилиты не зависит.
+
+### Озвученные фразы — это оплаченные данные
+
+Служебные фразы и ответы синтезируются один раз и лежат в `audio/tts-cache` и
+`audio/prompts` на сервере. Синтез стоит кредитов VoiceLab, а тексты не меняются, поэтому
+кэш переживает выкладку (`make deploy` каталог `audio` не трогает) и **удалять его
+нельзя** — восстановить можно только заново заплатив. Посмотреть, чего не хватает, не
+тратя ничего:
+
+```bash
+make voice-prewarm ARGS=--dry-run
 ```
 
 ## Настройки
@@ -112,6 +142,7 @@ asterisk -rx "module show like audiosocket"
 | Расшифровка вопросов и ответы | `logs/<дата>.jsonl` | `eduvoice`, `root` |
 | Номер звонящего | там же | `eduvoice`, `root` |
 | Ключи (VoiceLab, ARI, база) | `/root/eduvoice-credentials.txt`, `.env` (права `600`) | только `root`/`eduvoice` |
+| Озвученные фразы (кэш синтеза) | `/opt/eduvoice/app/audio/` | `eduvoice`, `root` |
 
 Принятые меры: control API слушает только `127.0.0.1`; порты моста наружу не открыты;
 сервис работает не от `root`, с `NoNewPrivileges`, `ProtectSystem=full`, `ProtectHome`;

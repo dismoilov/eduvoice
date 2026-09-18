@@ -123,6 +123,7 @@ make deploy          # выкатить мост и CRM, перезапусти�
 make crm-logs        # живой лог CRM
 make crm-restart
 make backup          # согласованная копия базы на сервере
+make sql Q="select count(*) from tickets"   # заглянуть в базу (системный sqlite3 её не читает, см. OPERATIONS.md)
 make crm-user USER_LOGIN=olim USER_NAME="Olim" USER_ROLE=operator USER_PASSWORD=... USER_EXT=101
 ```
 

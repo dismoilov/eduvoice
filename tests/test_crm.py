@@ -466,3 +466,28 @@ def test_an_overdue_request_is_marked_as_such(client, world):
     db.close()
 
     assert tickets[0]["overdue"] == 1, "the deadline passed years ago"
+
+
+# ---------------------------------------------------- looking inside the database
+
+
+def test_the_sql_helper_reads_but_refuses_to_write(tmp_path, monkeypatch, capsys):
+    """The server's own sqlite3 is from 2013 and calls this database malformed.
+
+    So the project carries its own way in. It is meant for looking, not for changing:
+    a stray DELETE typed into a terminal at a demo must not reach the data.
+    """
+    from crm import cli
+    from crm.config import settings as crm_settings
+
+    database = tmp_path / "look.db"
+    repo.create_user(
+        open_database(database), "boss", "Boss", "supervisor", hash_password(PASSWORD), ""
+    )
+    monkeypatch.setattr(crm_settings, "db_path", database)
+
+    assert cli.main(["sql", "SELECT login FROM users"]) == 0
+    assert "boss" in capsys.readouterr().out
+
+    assert cli.main(["sql", "DELETE FROM users"]) == 1, "a write must be refused"
+    assert open_database(database).execute("SELECT count(*) FROM users").fetchone()[0] == 1
