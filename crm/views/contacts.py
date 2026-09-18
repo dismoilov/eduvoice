@@ -125,6 +125,34 @@ def contact_call(
     )
 
 
+@router.post("/{contact_id}/callback/{callback_id}")
+def callback_done(
+    contact_id: int,
+    callback_id: int,
+    request: Request,
+    result: str = Form(""),
+    csrf: str = Form(""),
+    user: dict = Depends(current_user),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Closes a promise to ring someone back.
+
+    Without this the promise stayed open for ever: it sat on the operator's dashboard and
+    in the citizen's card with no way to say it had been kept.
+    """
+    require_csrf(request, csrf)
+    repo.complete_callback(db, callback_id, result)
+    repo.audit(
+        db,
+        user_id=int(user["id"]),
+        login=user["login"],
+        action="callback_done",
+        entity="callback",
+        entity_id=str(callback_id),
+    )
+    return redirect(f"/contacts/{contact_id}")
+
+
 @router.post("/{contact_id}/callback")
 def contact_callback(
     contact_id: int,

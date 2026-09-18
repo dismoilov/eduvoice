@@ -478,16 +478,31 @@ def create_knowledge(
     return int(cursor.lastrowid or 0)
 
 
+# What a version of an answer is made of. Publishing is a state, not a rewording: kept
+# here, a publish and an unpublish filled the history with entries whose text was
+# identical, and the one question the history exists to answer — how did the wording
+# change — became the hardest to read. Who published what and when is in the audit log.
+VERSIONED_FIELDS = ("question", "answer", "keywords", "source")
+
+
 def update_knowledge(db: sqlite3.Connection, entry_id: int, author_id: int, **fields: Any) -> None:
     """Saves a new version and keeps the old one: an answer is a regulation, not a note."""
     current = knowledge_entry(db, entry_id)
     if current is None:
         return
-    allowed = {"question", "answer", "keywords", "source", "status"}
+    allowed = {*VERSIONED_FIELDS, "status"}
     changes = {k: v for k, v in fields.items() if k in allowed and v != current.get(k)}
     if not changes:
         return
     stamp = now()
+    if not any(key in changes for key in VERSIONED_FIELDS):
+        with transaction(db):
+            assignments = ", ".join(f"{key} = ?" for key in changes)
+            db.execute(
+                f"UPDATE knowledge SET {assignments}, author_id = ?, updated_at = ? WHERE id = ?",
+                (*changes.values(), author_id, stamp, entry_id),
+            )
+        return
     with transaction(db):
         db.execute(
             "INSERT INTO knowledge_versions (knowledge_id, version, answer, keywords, source,"

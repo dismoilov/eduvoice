@@ -311,6 +311,7 @@ table.grid td.controls form { display: flex; gap: 6px; align-items: center; }
 .tag.operator, .tag.new, .tag.high { color: var(--warn); }
 .tag.dropped, .tag.draft, .tag.waiting { color: var(--idle); }
 .tag.in_progress { color: var(--accent); }
+.tag.overdue { color: var(--danger); }
 .tag.plain { color: var(--muted); }
 .overdue { color: var(--danger); font-weight: 700; }
 

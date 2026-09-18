@@ -572,3 +572,146 @@ def test_a_planned_callback_shows_on_the_dashboard(client, world):
     page = client.get("/").text
 
     assert "2026-09-19 09:00" in page, "the planned callback is not on the dashboard"
+
+
+# ------------------------------------------------------------- administration
+
+
+def test_the_last_administrator_cannot_sign_away_their_own_rights(client, world):
+    """There is no way back from it: the rights to restore an administrator are the ones
+    just given up. On a ministry server that means editing the database by hand."""
+    from crm import repo
+
+    sign_in(client, "root")
+    db = open_database(world)
+    admin_id = int(repo.user_by_login(db, "root")["id"])
+    db.close()
+    csrf = token(client)
+
+    client.post(
+        f"/admin/users/{admin_id}",
+        data={"csrf": csrf, "name": "Root", "role": "operator", "active": "1"},
+    )
+    client.post(f"/admin/users/{admin_id}", data={"csrf": csrf, "name": "Root", "role": "admin"})
+
+    db = open_database(world)
+    still = repo.user_by_login(db, "root")
+    db.close()
+    assert still["role"] == "admin", "the last administrator demoted themselves"
+    assert still["active"] == 1, "the last administrator switched their own account off"
+    assert client.get("/admin").status_code == 200, "administration is now unreachable"
+
+
+def test_a_new_account_needs_a_password_worth_having(client, world):
+    """The form accepted a single character, and that account can open every call record
+    of every citizen who has ever rung the ministry."""
+    from crm import repo
+
+    sign_in(client, "root")
+
+    answer = client.post(
+        "/admin/users",
+        data={
+            "csrf": token(client),
+            "login": "qisqa",
+            "name": "Q",
+            "role": "operator",
+            "password": "1",
+        },
+    )
+
+    assert "weak_password" in answer.headers.get("location", "")
+    db = open_database(world)
+    assert repo.user_by_login(db, "qisqa") is None, "a one-character password was accepted"
+    db.close()
+
+
+def test_handing_a_ticket_to_an_account_that_no_longer_exists_says_so(client):
+    """A page left open while an account was removed, or a replayed form. Straight
+    through, it hit the foreign key and came back as "the database is unavailable"."""
+    sign_in(client, "boss")
+
+    answer = client.post(
+        "/tickets/new",
+        data={"csrf": token(client), "subject": "S", "body": "B", "assignee_id": "99999"},
+    )
+
+    assert answer.status_code == 303, f"unexpected {answer.status_code}"
+    ticket = client.get(answer.headers["location"])
+    assert ticket.status_code == 200
+
+
+def test_publishing_an_answer_does_not_invent_a_new_version_of_its_text(client, world):
+    """The history exists to answer one question: how did the wording change.
+
+    Publishing and unpublishing used to file entries whose text was identical to the last,
+    so six clicks on the button buried the one edit that mattered. Who published it, and
+    when, is in the audit log, where it belongs.
+    """
+    from crm import repo
+
+    sign_in(client, "boss")
+    db = open_database(world)
+    entry = repo.create_knowledge(
+        db,
+        faq_id="sinov",
+        question="Savol",
+        answer="Birinchi javob.",
+        keywords="sinov",
+        source="59-son",
+        author_id=1,
+    )
+    db.close()
+    csrf = token(client)
+
+    for status in ("published", "draft", "published"):
+        client.post(f"/knowledge/{entry}/status", data={"csrf": csrf, "status": status})
+    client.post(
+        f"/knowledge/{entry}",
+        data={
+            "csrf": csrf,
+            "question": "Savol",
+            "answer": "Ikkinchi javob.",
+            "keywords": "sinov",
+            "source": "59-son",
+        },
+    )
+
+    db = open_database(world)
+    versions = repo.knowledge_versions(db, entry)
+    live = repo.knowledge_entry(db, entry)
+    db.close()
+    assert len(versions) == 1, f"the history has {len(versions)} entries for one rewording"
+    assert versions[0]["answer"] == "Birinchi javob."
+    assert live["answer"] == "Ikkinchi javob." and live["status"] == "published"
+
+
+def test_a_promised_callback_can_be_marked_as_kept(client, world):
+    """It could be promised but never closed: the row stayed "planned" for ever, on the
+    operator's dashboard and in the citizen's card, with no way to say it was done."""
+    from crm import repo
+
+    db = open_database(world)
+    contact = repo.contacts(db, limit=1)[0]
+    operator = repo.user_by_login(db, "operator")
+    callback = repo.create_callback(
+        db,
+        contact_id=int(contact["id"]),
+        due_at="2026-09-20 09:00",
+        assignee_id=int(operator["id"]),
+    )
+    db.close()
+    sign_in(client, "operator")
+    assert "2026-09-20 09:00" in client.get("/").text, "the promise should be on the dashboard"
+
+    answer = client.post(
+        f"/contacts/{contact['id']}/callback/{callback}",
+        data={"csrf": token(client), "result": "Fuqaroga tushuntirildi."},
+    )
+
+    assert answer.status_code == 303
+    db = open_database(world)
+    row = db.execute("SELECT status, result FROM callbacks WHERE id = ?", (callback,)).fetchone()
+    db.close()
+    assert row["status"] == "done" and row["result"] == "Fuqaroga tushuntirildi."
+    assert "2026-09-20 09:00" not in client.get("/").text, "a kept promise still shows as open"

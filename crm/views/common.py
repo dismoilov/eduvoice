@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 from fastapi import HTTPException, Request, status
 
+from crm import repo
 from crm.security import SESSION_COOKIE, csrf_ok
 
 # SQLite stores integers as 64-bit; anything larger cannot be a row id and raises
@@ -31,3 +34,18 @@ def as_id(value: str | int | None) -> int | None:
     except (TypeError, ValueError):
         return None
     return number if 0 < number <= MAX_ROW_ID else None
+
+
+def assignee_id(db: sqlite3.Connection, value: str | int | None) -> int | None:
+    """The operator a ticket is being handed to, or None if there is no such person.
+
+    A select box can carry an id that no longer exists — the page was open while the
+    account was removed, or the form was replayed. Passing it straight through hit the
+    foreign key and surfaced as the "database is unavailable" page, which says nothing
+    true about what happened.
+    """
+    number = as_id(value)
+    if number is None:
+        return None
+    found = repo.user(db, number)
+    return number if found and found["active"] else None

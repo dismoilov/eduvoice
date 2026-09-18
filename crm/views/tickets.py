@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from crm import repo
 from crm.config import settings
 from crm.deps import current_user, get_db, page, redirect
-from crm.views.common import as_id, require_csrf
+from crm.views.common import assignee_id as resolve_assignee
+from crm.views.common import require_csrf
 
 router = APIRouter(prefix="/tickets")
 
@@ -92,7 +93,7 @@ def ticket_create(
         contact_id=contact_id,
         category=category,
         priority=priority,
-        assignee_id=int(assignee_id) if assignee_id else None,
+        assignee_id=resolve_assignee(db, assignee_id),
         sla_hours=settings.sla_hours,
     )
     repo.audit(
@@ -152,7 +153,7 @@ def ticket_update(
     if priority in repo.PRIORITIES:
         fields["priority"] = priority
     if assignee_id != "":
-        fields["assignee_id"] = as_id(assignee_id)
+        fields["assignee_id"] = resolve_assignee(db, assignee_id)
     if category:
         fields["category"] = category
     if resolution:

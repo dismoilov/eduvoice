@@ -83,9 +83,14 @@
             <td class="tight num">{{ ui.when(row.due_at) }}</td>
             <td>{{ row.assignee_name or '—' }}</td>
             <td class="tight">
-              <span class="tag {{ 'resolved' if row.status == 'done' else 'waiting' }}">
-                {{ t('callback_done') if row.status == 'done' else t('callback_planned') }}
-              </span>
+              {% if row.status == 'done' %}
+              <span class="tag resolved">{{ t('callback_done') }}</span>
+              {% else %}
+              <form method="post" action="/contacts/{{ contact.id }}/callback/{{ row.id }}">
+                <input type="hidden" name="csrf" value="{{ csrf }}">
+                <button class="btn sm" type="submit">{{ t('callback_mark_done') }}</button>
+              </form>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}

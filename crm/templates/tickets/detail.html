@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui with context %}
 {% block heading %}{{ t('ticket') }} {{ ticket.number }}{% endblock %}
-{% block topbar %}{{ ui.status(ticket.status) }} {{ ui.priority(ticket.priority) }}{% endblock %}
+{% block topbar %}{{ ui.status(ticket.status) }} {{ ui.priority(ticket.priority) }}
+  {%- if ticket.overdue %} <span class="tag overdue">{{ t('dash_overdue') }}</span>{% endif %}{% endblock %}
 {% block content %}
 <div class="cols-2">
   <div class="stack">
@@ -9,7 +10,7 @@
       <header><h2>{{ ticket.subject }}</h2></header>
       <dl class="facts">
         <div><dt>{{ t('ticket_created') }}</dt><dd class="num">{{ ui.when(ticket.created_at) }}</dd></div>
-        <div><dt>{{ t('ticket_due') }}</dt><dd class="num">{{ ui.when(ticket.due_at) }}</dd></div>
+        <div><dt>{{ t('ticket_due') }}</dt><dd class="num{% if ticket.overdue %} overdue{% endif %}">{{ ui.when(ticket.due_at) }}</dd></div>
         <div><dt>{{ t('ticket_author') }}</dt><dd>{{ ticket.author_name or '—' }}</dd></div>
         <div><dt>{{ t('ticket_category') }}</dt><dd>{{ ticket.category or '—' }}</dd></div>
       </dl>
