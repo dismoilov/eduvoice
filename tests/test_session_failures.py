@@ -17,7 +17,7 @@ from eduvoice.brain import Brain
 from eduvoice.fakes import FakeSpeechToText, FakeTextToSpeech
 from eduvoice.interfaces import ChatMessage
 from eduvoice.prompts import PromptLibrary
-from eduvoice.registry import CallRegistry
+from eduvoice.registry import CallRegistry, Turn
 from eduvoice.session import CallSession
 from eduvoice.vad import BargeInDetector, SpeechDetector
 from tests.test_session import CONFIG, PROMPTS, QUIET, SPEECH, StubWriter, is_speech_frame
@@ -255,6 +255,46 @@ async def test_the_caller_can_interrupt_the_filler_they_are_listening_to():
     await wait_for(lambda: session.state == "listening", timeout=4)
 
     assert session._think_task is None, "the abandoned turn was left running"
+    reader.feed_eof()
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(task, timeout=5)
+
+
+async def test_two_callers_ending_the_same_call_write_it_down_once():
+    """`run()` finishing and a stop signal can both reach cleanup at the same moment.
+
+    Cleanup is one task, shielded from whoever awaits it, so the conversation is written
+    exactly once and the writing finishes even if every waiter goes away. The interleaving
+    that loses a call is hard to force in a test — the version of this that mattered was
+    observed on the server, where restarting the bridge during a live call left no
+    database row, no line in the journal that is meant to be the backup, and a recording
+    with nothing pointing at it.
+    """
+    call_id = str(uuid.uuid4())
+    reader, _writer, registry, session = build(BrokenChatModel())
+    reader.feed_data(encode(0x01, uuid.UUID(call_id).bytes))
+    task = asyncio.create_task(session.run())
+    await wait_for(lambda: session.state == "listening")
+    registry.ensure(call_id).turns.append(
+        Turn(question="Stipendiya?", answer="Javob.", intent="faq_keyword", action="faq")
+    )
+    session._speak("Uzun javob matni, hali aytilmagan qismi bor.")
+    await wait_for(lambda: session.state == "speaking")
+
+    first = asyncio.create_task(session.aclose())
+    second = asyncio.create_task(session.aclose())
+    first.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await first
+    await second
+
+    import time as _time
+
+    journal = CONFIG.call_log_dir / f"{_time.strftime('%Y%m%d')}.jsonl"
+    written = [line for line in journal.read_text().splitlines() if call_id in line]
+    assert len(written) == 1, f"the conversation was written {len(written)} times"
+    assert "Stipendiya?" in written[0]
+    assert session._cleaned_up, "the cleanup did not finish"
     reader.feed_eof()
     with contextlib.suppress(Exception):
         await asyncio.wait_for(task, timeout=5)

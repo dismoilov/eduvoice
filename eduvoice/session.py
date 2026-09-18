@@ -117,6 +117,7 @@ class CallSession:
         self._unheard = 0
         self._finishing = False
         self._cleaned_up = False
+        self._cleanup_task: asyncio.Task[None] | None = None
         self._started = time.monotonic()
         self._ended_reason = "caller_hangup"
         self._call_log = CallLog(config.call_log_dir)
@@ -565,37 +566,60 @@ class CallSession:
         await self._cleanup()
 
     async def _cleanup(self) -> None:
-        """Releases everything this call owns. Runs exactly once, even after a crash."""
-        if self._cleaned_up:
-            return
-        self._cleaned_up = True
-        self._cancel_filler()
-        await self._stop_speaking()
-        if self._think_task is not None and self._think_task is not asyncio.current_task():
-            self._think_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._think_task
-        self._think_task = None
-        await self._out.aclose()
-        for provider in (self._stt, self._tts, self._brain):
-            with contextlib.suppress(Exception):
-                await provider.close()
-        self._registry.finish(self.call_id)
-        with contextlib.suppress(OSError):
-            self._writer.close()
-        record = self._registry.get(self.call_id)
-        if record is not None:
-            entry = call_as_dict(record, self._ended_reason)
-            self._call_log.write_entry(entry)
-            if self._store is not None:
-                # In a worker thread: this is a writer, and SQLite makes writers wait for
-                # each other for up to five seconds. On the event loop that wait would
-                # stop the audio pacer, and every *other* caller would hear the gap.
-                await asyncio.to_thread(self._store.save, entry)
-        log.info(
-            "call %s ended after %.1f s, %d turns (%s)",
-            self.call_id or "unknown",
-            record.duration_s if record else 0.0,
-            len(record.turns) if record else 0,
-            self._ended_reason,
-        )
+        """Releases everything this call owns. Runs exactly once, even after a crash.
+
+        Two things here are deliberate and were learned the hard way.
+
+        The conversation is written down *before* anything slow is released. Closing the
+        providers means network calls that can be interrupted; the record is the part
+        nobody can reconstruct, so it goes first.
+
+        And it runs as its own task, shielded from whoever awaits it. A flag set on entry
+        is not enough: a cleanup interrupted halfway then counts as done, and the call it
+        had not yet written is lost while the process reports a clean shutdown. That is
+        exactly what happened to a live conversation on the server during a `make deploy`
+        — no database row, no line in the journal that is meant to be the backup, and a
+        recording on disk with nothing pointing at it.
+        """
+        if self._cleanup_task is None:
+            self._cleanup_task = asyncio.create_task(self._do_cleanup())
+        # Shielded: whoever is waiting may themselves be cancelled — the call is ending,
+        # after all — and the writing down must finish regardless of who is still here.
+        await asyncio.shield(self._cleanup_task)
+
+    async def _do_cleanup(self) -> None:
+        try:
+            self._cancel_filler()
+            await self._stop_speaking()
+            if self._think_task is not None and self._think_task is not asyncio.current_task():
+                self._think_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._think_task
+            self._think_task = None
+
+            self._registry.finish(self.call_id)
+            record = self._registry.get(self.call_id)
+            if record is not None:
+                entry = call_as_dict(record, self._ended_reason)
+                self._call_log.write_entry(entry)
+                if self._store is not None:
+                    # In a worker thread: this is a writer, and SQLite makes writers wait
+                    # for each other for up to five seconds. On the event loop that wait
+                    # would stop the audio pacer, and every *other* caller would hear it.
+                    await asyncio.shield(asyncio.to_thread(self._store.save, entry))
+
+            await self._out.aclose()
+            for provider in (self._stt, self._tts, self._brain):
+                with contextlib.suppress(Exception):
+                    await provider.close()
+            with contextlib.suppress(OSError):
+                self._writer.close()
+            log.info(
+                "call %s ended after %.1f s, %d turns (%s)",
+                self.call_id or "unknown",
+                record.duration_s if record else 0.0,
+                len(record.turns) if record else 0,
+                self._ended_reason,
+            )
+        finally:
+            self._cleaned_up = True

@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import signal
 
 from eduvoice.audiosocket import serve
 from eduvoice.brain import Brain
@@ -41,6 +42,15 @@ def build_providers() -> tuple[SpeechToText, TextToSpeech, ChatModel]:
     return FakeSpeechToText(), FakeTextToSpeech(), FakeChatModel()
 
 
+# How long a stop may spend writing calls in progress to the database. systemd's
+# TimeoutStopSec must be larger, or it will send SIGKILL in the middle of that.
+SHUTDOWN_GRACE_S = 10.0
+
+# Calls in progress right now, so that a stop signal can write them down before exiting.
+live: set[CallSession] = set()
+shutting_down = asyncio.Event()
+
+
 def make_call_handler(faq: Faq, prompts: PromptLibrary, knowledge=None, store=None):
     """Builds the AudioSocket connection handler.
 
@@ -52,6 +62,12 @@ def make_call_handler(faq: Faq, prompts: PromptLibrary, knowledge=None, store=No
     async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         session: CallSession | None = None
         try:
+            if shutting_down.is_set():
+                # Already stopping: the dialplan's safe default hands this caller to a
+                # person rather than to a bridge that is halfway out of the door.
+                with contextlib.suppress(OSError):
+                    writer.close()
+                return
             stt, tts, model = build_providers()
             published = knowledge.entries() if knowledge is not None else {}
             answers = Faq.from_records(published) if published else faq
@@ -71,6 +87,7 @@ def make_call_handler(faq: Faq, prompts: PromptLibrary, knowledge=None, store=No
                 config=settings,
                 store=store,
             )
+            live.add(session)
             await session.run()
         except Exception:  # one broken call must not take the bridge down
             call_id = session.call_id if session else ""
@@ -83,6 +100,9 @@ def make_call_handler(faq: Faq, prompts: PromptLibrary, knowledge=None, store=No
                     await session.aclose()
             with contextlib.suppress(OSError):
                 writer.close()
+        finally:
+            if session is not None:
+                live.discard(session)
 
     return handle_call
 
@@ -132,8 +152,27 @@ async def main() -> None:
         settings.control_port,
         settings.provider,
     )
+    loop = asyncio.get_running_loop()
+    for signal_name in (signal.SIGTERM, signal.SIGINT):
+        with contextlib.suppress(NotImplementedError):  # not available on every platform
+            loop.add_signal_handler(signal_name, shutting_down.set)
+
     async with audio_server, control_server:
-        await asyncio.gather(audio_server.serve_forever(), control_server.serve_forever())
+        await shutting_down.wait()
+
+    # `make deploy` restarts this service, and a restart used to take every conversation
+    # in progress with it: the process died at the next bytecode, so the code that writes
+    # a finished call to the database — and to the JSON journal that is supposed to be its
+    # backup — never ran. Ten people had been talking to us and the CRM showed nothing.
+    in_progress = list(live)
+    log.info("stopping: %d call(s) in progress", len(in_progress))
+    if in_progress:
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(
+                asyncio.gather(*(call.aclose() for call in in_progress), return_exceptions=True),
+                timeout=SHUTDOWN_GRACE_S,
+            )
+    log.info("stopped")
 
 
 if __name__ == "__main__":
