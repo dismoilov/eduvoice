@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block heading %}{{ entry.faq_id if entry else t('kb_new') }}{% endblock %}
+{% block topbar %}
+  {% if entry %}<span class="tag {{ entry.status }}">{{ t('kb_' + entry.status) }}</span>{% endif %}
+{% endblock %}
+{% block content %}
+<div class="cols-2">
+  <section class="card">
+    <form class="form body" method="post" action="{{ '/knowledge/%d'|format(entry.id) if entry else '/knowledge/new' }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if not entry %}
+      <div class="field">
+        <label for="faq_id">{{ t('kb_id') }}</label>
+        <input id="faq_id" name="faq_id" placeholder="stipend" autofocus>
+      </div>
+      {% endif %}
+      <div class="field">
+        <label for="question">{{ t('kb_question') }}</label>
+        <input id="question" name="question" value="{{ entry.question if entry else '' }}">
+      </div>
+      <div class="field">
+        <label for="answer">{{ t('kb_answer') }}</label>
+        <textarea id="answer" name="answer" style="min-height:150px">{{ entry.answer if entry else '' }}</textarea>
+        <div class="hint">{{ t('kb_preview') }}</div>
+      </div>
+      <div class="field">
+        <label for="keywords">{{ t('kb_keywords') }}</label>
+        <input id="keywords" name="keywords" value="{{ entry.keywords if entry else '' }}">
+        <div class="hint">{{ t('kb_keywords_hint') }}</div>
+      </div>
+      <div class="field">
+        <label for="source">{{ t('kb_source') }}</label>
+        <input id="source" name="source" value="{{ entry.source if entry else '' }}">
+      </div>
+      <div class="row">
+        {% if can(user, 'supervisor', 'admin') %}
+          <button class="btn primary" type="submit">{{ t('save') }}</button>
+        {% endif %}
+        <a class="btn" href="/knowledge">{{ t('cancel') }}</a>
+      </div>
+    </form>
+  </section>
+
+  <div class="stack">
+    {% if entry and can(user, 'supervisor', 'admin') %}
+    <section class="card">
+      <header><h2>{{ t('kb_status') }}</h2></header>
+      <div class="body">
+        <form method="post" action="/knowledge/{{ entry.id }}/status">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          {% if entry.status == 'published' %}
+            <input type="hidden" name="status" value="draft">
+            <button class="btn" type="submit">{{ t('kb_unpublish') }}</button>
+          {% else %}
+            <input type="hidden" name="status" value="published">
+            <button class="btn primary" type="submit">{{ t('kb_publish') }}</button>
+          {% endif %}
+        </form>
+        <p class="muted" style="margin:12px 0 0;font-size:12.5px">{{ t('kb_hint') }}</p>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if versions %}
+    <section class="card">
+      <header><h2>{{ t('kb_version') }}</h2></header>
+      <ul class="timeline">
+        {% for version in versions %}
+        <li>
+          <div class="when num">v{{ version.version }} · {{ ui.when(version.saved_at) }} · {{ version.author_name or '—' }}</div>
+          <div class="muted" style="font-size:12.5px">{{ version.answer[:160] }}</div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

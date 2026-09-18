@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block heading %}{{ t('nav_admin') }}{% endblock %}
+{% block content %}
+<div class="stack">
+  <section class="card">
+    <header><h2>{{ t('users') }}</h2></header>
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>{{ t('user_login') }}</th><th>{{ t('user_name') }}</th><th>{{ t('user_role') }}</th>
+          <th>{{ t('user_extension') }}</th><th>{{ t('user_active') }}</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in users %}
+        <tr>
+          <form method="post" action="/admin/users/{{ row.id }}">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <td class="tight mono">{{ row.login }}</td>
+          <td><input name="name" value="{{ row.name }}" style="width:100%;padding:4px 6px;border:1px solid var(--line)"></td>
+          <td class="tight">
+            <select name="role" style="padding:4px 6px;border:1px solid var(--line)">
+              {% for value in roles %}<option value="{{ value }}" {% if row.role == value %}selected{% endif %}>{{ t('role_' + value) }}</option>{% endfor %}
+            </select>
+          </td>
+          <td class="tight"><input name="extension" value="{{ row.extension }}" style="width:70px;padding:4px 6px;border:1px solid var(--line)"></td>
+          <td class="tight"><input type="checkbox" name="active" value="1" {% if row.active %}checked{% endif %}></td>
+          <td class="tight">
+            <input name="password" type="password" placeholder="{{ t('user_password_new') }}" style="width:130px;padding:4px 6px;border:1px solid var(--line)">
+            <button class="btn small" type="submit">{{ t('save') }}</button>
+          </td>
+          </form>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <form class="form body" method="post" action="/admin/users">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="row">
+        <div class="field"><label for="login">{{ t('user_login') }}</label><input id="login" name="login"></div>
+        <div class="field"><label for="name">{{ t('user_name') }}</label><input id="name" name="name"></div>
+        <div class="field">
+          <label for="role">{{ t('user_role') }}</label>
+          <select id="role" name="role">
+            {% for value in roles %}<option value="{{ value }}">{{ t('role_' + value) }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label for="extension">{{ t('user_extension') }}</label><input id="extension" name="extension"></div>
+        <div class="field"><label for="password">{{ t('password') }}</label><input id="password" name="password" type="password"></div>
+        <button class="btn primary" type="submit">{{ t('user_new') }}</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <header><h2>{{ t('audit') }}</h2></header>
+    <table class="grid">
+      <thead><tr><th>{{ t('audit_when') }}</th><th>{{ t('audit_who') }}</th><th>{{ t('audit_what') }}</th><th></th></tr></thead>
+      <tbody>
+        {% for row in audit %}
+        <tr>
+          <td class="tight num">{{ ui.when(row.at) }}</td>
+          <td class="tight">{{ row.login or '—' }}</td>
+          <td class="mono">{{ row.action }}</td>
+          <td class="muted">{{ row.entity }} {{ row.entity_id }} {{ row.detail[:60] }}</td>
+        </tr>
+        {% else %}<tr><td colspan="4" class="empty">{{ t('empty') }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}

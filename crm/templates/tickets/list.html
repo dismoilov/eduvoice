@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block heading %}{{ t('nav_tickets') }}{% endblock %}
+{% block topbar %}<a class="btn primary small" href="/tickets/new">{{ t('ticket_new') }}</a>{% endblock %}
+{% block content %}
+<section class="card">
+  <form class="filters auto" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="{{ t('search') }}" style="min-width:200px">
+    <select name="status">
+      <option value="open" {% if status == 'open' %}selected{% endif %}>{{ t('status_new') }} + {{ t('status_in_progress') }}</option>
+      <option value="" {% if not status %}selected{% endif %}>{{ t('all') }}</option>
+      {% for value in ['new', 'in_progress', 'waiting', 'resolved', 'closed'] %}
+        <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ t('status_' + value) }}</option>
+      {% endfor %}
+    </select>
+    <label class="muted" style="display:flex;gap:6px;align-items:center;font-size:13px">
+      <input type="checkbox" name="mine" value="1" {% if mine %}checked{% endif %} style="width:auto"> {{ t('ticket_mine') }}
+    </label>
+    <label class="muted" style="display:flex;gap:6px;align-items:center;font-size:13px">
+      <input type="checkbox" name="unassigned" value="1" {% if unassigned %}checked{% endif %} style="width:auto"> {{ t('ticket_unassigned') }}
+    </label>
+    <label class="muted" style="display:flex;gap:6px;align-items:center;font-size:13px">
+      <input type="checkbox" name="overdue" value="1" {% if overdue %}checked{% endif %} style="width:auto"> {{ t('dash_overdue') }}
+    </label>
+    <button class="btn small" type="submit">{{ t('filter') }}</button>
+    <div class="grow"></div>
+    <span class="muted num">{{ tickets|length }}</span>
+  </form>
+
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>{{ t('ticket_number') }}</th>
+        <th>{{ t('ticket_subject') }}</th>
+        <th>{{ t('contact') }}</th>
+        <th>{{ t('ticket_assignee') }}</th>
+        <th>{{ t('ticket_status') }}</th>
+        <th>{{ t('ticket_due') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ticket in tickets %}
+      <tr>
+        <td class="tight mono">{{ ticket.number }}</td>
+        <td>
+          <a class="row-link" href="/tickets/{{ ticket.id }}">{{ ticket.subject }}</a>
+          {% if ticket.priority == 'high' %} {{ ui.priority(ticket.priority) }}{% endif %}
+        </td>
+        <td class="tight mono">{{ ticket.contact_phone or '—' }}</td>
+        <td class="tight">{{ ticket.assignee_name or t('ticket_unassigned') }}</td>
+        <td class="tight">{{ ui.status(ticket.status) }}</td>
+        <td class="tight num {% if ticket.overdue %}overdue{% endif %}">{{ ui.when(ticket.due_at) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">{{ t('empty') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

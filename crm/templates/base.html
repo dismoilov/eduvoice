@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="{{ lang }}" data-theme="{{ theme }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ t('app') }}{% endblock %} — {{ t('app') }}</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div>
+        <span class="name">EduVoice<span class="dot"></span></span>
+        <span class="sub">{{ t('app_sub') }}</span>
+      </div>
+    </div>
+    <nav>
+      {% macro item(href, key, icon) %}
+        <a href="{{ href }}" {% if path == href or (href != '/' and path.startswith(href)) %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">{{ icon|safe }}</svg>
+          <span>{{ t(key) }}</span>
+        </a>
+      {% endmacro %}
+      {{ item('/', 'nav_dashboard', '<rect x="1.5" y="1.5" width="5.5" height="5.5"/><rect x="9" y="1.5" width="5.5" height="5.5"/><rect x="1.5" y="9" width="5.5" height="5.5"/><rect x="9" y="9" width="5.5" height="5.5"/>') }}
+      {{ item('/calls', 'nav_calls', '<path d="M3 2.5h3l1 3-2 1a9 9 0 0 0 4.5 4.5l1-2 3 1v3c0 .6-.4 1-1 1A12 12 0 0 1 2 3.5c0-.6.4-1 1-1Z"/>') }}
+      {{ item('/tickets', 'nav_tickets', '<rect x="2" y="2" width="12" height="12"/><path d="M4.5 6h7M4.5 9h4"/>') }}
+      {{ item('/contacts', 'nav_contacts', '<circle cx="8" cy="5.5" r="2.5"/><path d="M2.5 14c0-3 2.5-4.5 5.5-4.5s5.5 1.5 5.5 4.5"/>') }}
+      {{ item('/knowledge', 'nav_knowledge', '<path d="M2.5 3h5a1.5 1.5 0 0 1 1.5 1.5V14a2 2 0 0 0-2-1.5H2.5Z"/><path d="M13.5 3h-4A1.5 1.5 0 0 0 8 4.5V14a2 2 0 0 1 2-1.5h3.5Z"/>') }}
+      {% if user and can(user, 'supervisor', 'admin') %}
+        {{ item('/analytics', 'nav_analytics', '<path d="M2 14V2"/><path d="M2 14h12"/><rect x="4.5" y="8" width="2.5" height="4"/><rect x="8.5" y="5" width="2.5" height="7"/>') }}
+      {% endif %}
+      {% if user and can(user, 'admin') %}
+        {{ item('/admin', 'nav_admin', '<circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.5 3.5l1.5 1.5M11 11l1.5 1.5M12.5 3.5 11 5M5 11l-1.5 1.5"/>') }}
+      {% endif %}
+    </nav>
+    {% if user %}
+    <div class="foot">
+      <div class="who">{{ user.name }}</div>
+      <div>{{ t('role_' + user.role) }}{% if user.extension %} · {{ user.extension }}{% endif %}</div>
+      <div style="margin-top:8px"><a href="/logout">{{ t('logout') }}</a></div>
+    </div>
+    {% endif %}
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <h1>{% block heading %}{% endblock %}</h1>
+      {% block topbar %}{% endblock %}
+      <div class="grow"></div>
+      <form class="search" action="/calls" method="get">
+        <input type="search" name="q" value="{{ query.get('q', '') }}" placeholder="{{ t('search_hint') }}">
+      </form>
+      <form method="post" action="/prefs" class="switch">
+        <input type="hidden" name="back" value="{{ path }}">
+        <button name="theme" value="light" aria-pressed="{{ 'true' if theme == 'light' else 'false' }}">{{ t('theme_light') }}</button>
+        <button name="theme" value="dark" aria-pressed="{{ 'true' if theme == 'dark' else 'false' }}">{{ t('theme_dark') }}</button>
+      </form>
+      <form method="post" action="/prefs" class="switch">
+        <input type="hidden" name="back" value="{{ path }}">
+        <button name="language" value="uz" aria-pressed="{{ 'true' if lang == 'uz' else 'false' }}">UZ</button>
+        <button name="language" value="ru" aria-pressed="{{ 'true' if lang == 'ru' else 'false' }}">RU</button>
+      </form>
+    </div>
+    <div class="content">{% block content %}{% endblock %}</div>
+  </main>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

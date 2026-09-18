@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block heading %}{{ t('nav_contacts') }}{% endblock %}
+{% block content %}
+<section class="card">
+  <form class="filters" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="{{ t('contact_phone') }} / {{ t('contact_name') }}" style="min-width:240px">
+    <button class="btn small" type="submit">{{ t('search') }}</button>
+    <a class="btn small" href="/contacts">{{ t('reset') }}</a>
+    <div class="grow"></div><span class="muted num">{{ contacts|length }}</span>
+  </form>
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>{{ t('contact_phone') }}</th><th>{{ t('contact_name') }}</th><th>{{ t('contact_kind') }}</th>
+        <th class="right">{{ t('contact_calls') }}</th><th class="right">{{ t('contact_tickets') }}</th>
+        <th>{{ t('call_time') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for contact in contacts %}
+      <tr>
+        <td class="tight mono"><a class="row-link" href="/contacts/{{ contact.id }}">{{ contact.phone }}</a></td>
+        <td>{{ contact.name or '—' }}</td>
+        <td class="tight">{{ t('kind_' + contact.kind) if contact.kind else '—' }}</td>
+        <td class="tight right num">{{ contact.calls }}</td>
+        <td class="tight right num">{{ contact.tickets }}</td>
+        <td class="tight num muted">{{ ui.when(contact.last_call) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">{{ t('empty') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block heading %}{{ t('call') }} · {{ ui.when(call.started_at) }}{% endblock %}
+{% block topbar %}{{ ui.outcome(call.outcome) }}{% endblock %}
+{% block content %}
+<div class="cols-2">
+  <div class="stack">
+    <section class="card">
+      <dl class="facts">
+        <div><dt>{{ t('call_number') }}</dt><dd class="mono">{{ call.caller or t('unknown') }}</dd></div>
+        <div><dt>{{ t('call_duration') }}</dt><dd class="num">{{ ui.clock(call.duration_s) }}</dd></div>
+        <div><dt>{{ t('call_questions') }}</dt><dd class="num">{{ call.questions }}</dd></div>
+        <div><dt>{{ t('call_outcome') }}</dt><dd>{{ t('outcome_' + call.outcome) }}</dd></div>
+      </dl>
+    </section>
+
+    <section class="card">
+      <header><h2>{{ t('call_recording') }}</h2></header>
+      <div class="player" id="player" data-missing="{{ t('call_no_recording') }}">
+        <audio id="recording" preload="metadata" data-duration="{{ call.duration_s|round|int }}"
+               src="/media/recordings/{{ call.call_id }}"></audio>
+        <div class="transport">
+          <button class="play" id="play" type="button">▶</button>
+          <div class="readout num"><span id="at">0:00</span><span class="of"> / <span id="total">{{ ui.clock(call.duration_s) }}</span></span></div>
+          <div class="grow"></div>
+          <button class="btn small" id="speed" type="button">1×</button>
+          <a class="btn small" href="/media/recordings/{{ call.call_id }}" download="{{ call.call_id }}.wav">{{ t('call_download') }}</a>
+        </div>
+        <div class="ruler" id="ruler"><div class="line"></div><div class="played"></div></div>
+        <div class="ruler-foot">
+          <span class="num">0:00</span>
+          <span>{{ t('call_marks_hint') }}</span>
+          <span class="num">{{ ui.clock(call.duration_s) }}</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <header><h2>{{ t('call_transcript') }}</h2></header>
+      {% if turns %}
+      <ol class="script">
+        {% for turn in turns %}
+        <li>
+          <div class="cue">
+            <span class="no">{{ loop.index }}</span>
+            {% if turn.at_ms %}
+              <button class="at num" type="button" data-at="{{ turn.at_ms }}" data-question="{{ turn.question }}">▶ {{ ui.clock(turn.at_ms / 1000) }}</button>
+            {% endif %}
+            {% if turn.intent %}<span class="how">{{ turn.intent }}</span>{% endif %}
+          </div>
+          <div class="said q">
+            <div class="who">{{ t('speaker_citizen') }}</div>
+            <div class="what">{{ turn.question or '—' }}</div>
+          </div>
+          <div class="said">
+            <div class="who">{{ t('speaker_assistant') }}</div>
+            <div class="what">{{ turn.answer or '—' }}</div>
+          </div>
+          {% if turn.source %}<div class="cite">{{ t('source') }}: {{ turn.source }}</div>{% endif %}
+          <div class="timings">
+            {% if turn.stt_ms %}<span class="num">{{ t('latency_stt') }} {{ ui.ms(turn.stt_ms) }}</span>{% endif %}
+            {% if turn.decision_ms %}<span class="num">{{ t('latency_decision') }} {{ ui.ms(turn.decision_ms) }}</span>{% endif %}
+            {% if turn.total_ms %}<span class="num">{{ t('latency_total') }} {{ ui.ms(turn.total_ms) }}</span>{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+      {% else %}<div class="empty">{{ t('empty') }}</div>{% endif %}
+    </section>
+  </div>
+
+  <div class="stack">
+    {% if call.contact_id %}
+    <section class="card">
+      <header><h2>{{ t('contact') }}</h2></header>
+      <div class="body">
+        <div style="font-weight:600">{{ call.contact_name or t('unknown') }}</div>
+        <div class="mono muted">{{ call.contact_phone }}</div>
+        <p style="margin:12px 0 0"><a class="btn small" href="/contacts/{{ call.contact_id }}">{{ t('open') }}</a></p>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <header><h2>{{ t('linked_ticket') }}</h2></header>
+      {% if call.ticket_id %}
+        <div class="body">
+          <a class="btn" href="/tickets/{{ call.ticket_id }}">{{ call.ticket_number }}</a>
+        </div>
+      {% else %}
+        <form class="form body" method="post" action="/calls/{{ call.id }}/ticket">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <div class="field">
+            <label for="subject">{{ t('ticket_subject') }}</label>
+            <input id="subject" name="subject" value="{{ turns[0].question if turns else '' }}">
+          </div>
+          <div class="field">
+            <label for="body">{{ t('ticket_body') }}</label>
+            <textarea id="body" name="body" style="min-height:70px"></textarea>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="priority">{{ t('ticket_priority') }}</label>
+              <select id="priority" name="priority">
+                {% for value in ['low', 'normal', 'high'] %}
+                  <option value="{{ value }}" {% if value == 'normal' %}selected{% endif %}>{{ t('priority_' + value) }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="assignee">{{ t('ticket_assignee') }}</label>
+              <select id="assignee" name="assignee_id">
+                <option value="">{{ t('ticket_unassigned') }}</option>
+                {% for operator in operators %}
+                  <option value="{{ operator.id }}" {% if operator.id == user.id %}selected{% endif %}>{{ operator.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <button class="btn primary" type="submit">{{ t('create_ticket_from_call') }}</button>
+        </form>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

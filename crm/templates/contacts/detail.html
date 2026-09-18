@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block heading %}{{ contact.name or contact.phone }}{% endblock %}
+{% block content %}
+{% if notice %}<div class="notice" style="margin-bottom:16px">{{ t(notice) }}</div>{% endif %}
+<div class="cols-2">
+  <div class="stack">
+    <section class="card">
+      <header><h2>{{ t('contact_calls') }}</h2></header>
+      <table class="grid">
+        <tbody>
+          {% for call in calls %}
+          <tr>
+            <td class="tight rail-cell {{ call.outcome }} num">{{ ui.when(call.started_at) }}</td>
+            <td><a class="row-link" href="/calls/{{ call.id }}">{{ call.first_question or '—' }}</a></td>
+            <td class="tight">{{ ui.outcome(call.outcome) }}</td>
+          </tr>
+          {% else %}<tr><td class="empty">{{ t('empty') }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <header>
+        <h2>{{ t('contact_tickets') }}</h2><div class="grow"></div>
+        <a class="btn small" href="/tickets/new?contact_id={{ contact.id }}">{{ t('ticket_new') }}</a>
+      </header>
+      <table class="grid">
+        <tbody>
+          {% for ticket in tickets %}
+          <tr>
+            <td class="tight mono">{{ ticket.number }}</td>
+            <td><a class="row-link" href="/tickets/{{ ticket.id }}">{{ ticket.subject }}</a></td>
+            <td class="tight">{{ ui.status(ticket.status) }}</td>
+          </tr>
+          {% else %}<tr><td class="empty">{{ t('empty') }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="card">
+      <header><h2>{{ t('contact') }}</h2></header>
+      <form class="form body" method="post" action="/contacts/{{ contact.id }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field">
+          <label>{{ t('contact_phone') }}</label>
+          <div class="mono" style="font-size:15px">{{ contact.phone }}</div>
+        </div>
+        <div class="field">
+          <label for="name">{{ t('contact_name') }}</label>
+          <input id="name" name="name" value="{{ contact.name }}">
+        </div>
+        <div class="field">
+          <label for="kind">{{ t('contact_kind') }}</label>
+          <select id="kind" name="kind">
+            <option value="">—</option>
+            {% for value in kinds %}
+              <option value="{{ value }}" {% if contact.kind == value %}selected{% endif %}>{{ t('kind_' + value) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="university">{{ t('contact_university') }}</label>
+          <input id="university" name="university" value="{{ contact.university }}">
+        </div>
+        <div class="field">
+          <label for="note">{{ t('contact_note') }}</label>
+          <textarea id="note" name="note" style="min-height:70px">{{ contact.note }}</textarea>
+        </div>
+        <button class="btn primary" type="submit">{{ t('save') }}</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <header><h2>{{ t('actions') }}</h2></header>
+      <div class="body stack" style="gap:10px">
+        <form method="post" action="/contacts/{{ contact.id }}/call">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn dark" type="submit" {% if not user.extension %}disabled title="{{ t('user_extension') }}"{% endif %}>
+            {{ t('call_back') }}
+          </button>
+        </form>
+        <form class="form" method="post" action="/contacts/{{ contact.id }}/callback">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <div class="field">
+            <label for="due">{{ t('callback_due') }}</label>
+            <input id="due" name="due_at" type="datetime-local">
+          </div>
+          <button class="btn" type="submit">{{ t('callback_plan') }}</button>
+        </form>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

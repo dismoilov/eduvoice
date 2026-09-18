@@ -1,0 +1,55 @@
+{# Pieces reused across screens: status marks, durations, tiny charts. #}
+
+{% macro outcome(value) %}<span class="tag {{ value }}">{{ t('outcome_' + value) }}</span>{% endmacro %}
+{% macro status(value) %}<span class="tag {{ value }}">{{ t('status_' + value) }}</span>{% endmacro %}
+{% macro priority(value) %}<span class="tag {{ value }} plain">{{ t('priority_' + value) }}</span>{% endmacro %}
+
+{% macro clock(seconds) %}{{ '%d:%02d'|format((seconds or 0)//60, (seconds or 0)%60) }}{% endmacro %}
+{% macro ms(value) %}{% if value %}{{ '%.1f s'|format(value/1000) if value >= 1000 else '%d ms'|format(value) }}{% else %}—{% endif %}{% endmacro %}
+{% macro when(value) %}{{ (value or '')[8:10] }}.{{ (value or '')[5:7] }} {{ (value or '')[11:16] }}{% endmacro %}
+
+{# Charts are built from plain elements, not stretched SVG: a bar is a box with a
+   height in percent, which never distorts and always prints correctly. #}
+{% macro columns(rows, key='calls', height=130) %}
+  {% set top = (rows | map(attribute=key) | max) or 1 %}
+  <div class="colchart" style="height: {{ height }}px">
+    {% for row in rows %}
+      <div class="col" title="{{ row.label }}: {{ row[key] }}">
+        <div class="stack-bars">
+          <div class="seg base" style="height: {{ (row[key] / top * 100) | round(1) }}%"></div>
+        </div>
+        <div class="lbl">{{ row.label if loop.index0 % (2 if rows|length > 16 else 1) == 0 else '' }}</div>
+      </div>
+    {% endfor %}
+  </div>
+{% endmacro %}
+
+{# The same, split by how each day ended. #}
+{% macro stacked(rows, height=130) %}
+  {% set top = (rows | map(attribute='calls') | max) or 1 %}
+  <div class="colchart" style="height: {{ height }}px">
+    {% for row in rows %}
+      <div class="col" title="{{ row.label }}: {{ row.calls }}">
+        <div class="stack-bars">
+          <div class="seg dropped" style="height: {{ (row.dropped / top * 100) | round(1) }}%"></div>
+          <div class="seg operator" style="height: {{ (row.operator / top * 100) | round(1) }}%"></div>
+          <div class="seg bot" style="height: {{ (row.bot / top * 100) | round(1) }}%"></div>
+        </div>
+        <div class="lbl">{{ row.label }}</div>
+      </div>
+    {% endfor %}
+  </div>
+{% endmacro %}
+
+{% macro bars(rows, label_key, value_key) %}
+  {% set top = (rows | map(attribute=value_key) | max) or 1 %}
+  <div class="bars">
+    {% for row in rows %}
+      <div class="row">
+        <div class="nowrap" title="{{ row[label_key] }}" style="overflow:hidden;text-overflow:ellipsis">{{ row[label_key] }}</div>
+        <div class="track"><div class="fill" style="width: {{ (row[value_key] / top * 100) | round }}%"></div></div>
+        <div class="num muted">{{ row[value_key] }}</div>
+      </div>
+    {% endfor %}
+  </div>
+{% endmacro %}

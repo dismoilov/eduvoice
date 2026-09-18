@@ -1,0 +1,29 @@
+# Service phrases, Uzbek only. Person B turns these into audio (see PLAN.md, task V6).
+# DRAFT: wording must be checked by a native speaker before the demo.
+
+ivr_menu: >-
+  Oliy taʼlim vazirligiga xush kelibsiz.
+  Yordamchi bilan gaplashish uchun bir raqamini bosing.
+  Operator bilan bogʻlanish uchun nol raqamini bosing.
+
+greeting: >-
+  Assalomu alaykum! Oliy taʼlim vazirligining virtual yordamchisiman.
+  Suhbat yozib olinadi. Savolingizni ayting.
+
+filler: Bir daqiqa, tekshiryapman.
+
+anything_else: Yana savolingiz bormi?
+
+repeat_please: Kechirasiz, eshitmadim. Iltimos, savolingizni qaytaring.
+
+not_understood: Kechirasiz, savolingizni tushunmadim.
+
+out_of_scope: Men faqat oliy taʼlim masalalari boʻyicha javob bera olaman.
+
+reprompt: Savolingizni ayting.
+
+transfer: Sizni operatorga ulayman, kutib turing.
+
+tech_problem: Texnik nosozlik. Sizni operatorga ulayman.
+
+goodbye: Qoʻngʻiroq uchun rahmat. Sogʻ boʻling.

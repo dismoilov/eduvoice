@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block heading %}{{ t('nav_dashboard') }}{% endblock %}
+{% block content %}
+<div class="stack">
+
+  <div class="tiles">
+    <div class="tile lead">
+      <div class="value num">{{ figures.calls_today }}</div>
+      <div class="label">{{ t('dash_calls') }} · {{ t('today') }}</div>
+    </div>
+    <div class="tile">
+      <div class="value num">{{ figures.questions_today }}</div>
+      <div class="label">{{ t('dash_questions') }}</div>
+    </div>
+    <div class="tile">
+      <div class="value num">{{ figures.without_operator_percent }}<small>%</small></div>
+      <div class="label">{{ t('dash_no_operator') }}</div>
+    </div>
+    <div class="tile">
+      <div class="value num">{{ ui.ms(figures.avg_answer_ms) }}</div>
+      <div class="label">{{ t('dash_avg') }}</div>
+    </div>
+    <div class="tile">
+      <div class="value num">{{ figures.open_tickets }}</div>
+      <div class="label">{{ t('dash_open_tickets') }}</div>
+    </div>
+    <div class="tile {% if figures.overdue_tickets %}alert{% endif %}">
+      <div class="value num">{{ figures.overdue_tickets }}</div>
+      <div class="label">{{ t('dash_overdue') }}</div>
+    </div>
+  </div>
+
+  <div class="cols-2">
+    <div class="stack">
+      <section class="card">
+        <header>
+          <h2>{{ t('dash_my_tickets') }}</h2>
+          <div class="grow"></div>
+          <a class="btn small" href="/tickets?mine=1">{{ t('open') }}</a>
+        </header>
+        {% if my_tickets %}
+        <table class="grid">
+          <tbody>
+            {% for ticket in my_tickets %}
+            <tr>
+              <td class="tight mono">{{ ticket.number }}</td>
+              <td><a class="row-link" href="/tickets/{{ ticket.id }}">{{ ticket.subject }}</a></td>
+              <td class="tight">{{ ui.status(ticket.status) }}</td>
+              <td class="tight num muted">{{ ui.when(ticket.due_at) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<div class="empty">{{ t('empty') }}</div>{% endif %}
+      </section>
+
+      <section class="card">
+        <header>
+          <h2>{{ t('dash_recent_calls') }}</h2>
+          <div class="grow"></div>
+          <a class="btn small" href="/calls">{{ t('open') }}</a>
+        </header>
+        <table class="grid">
+          <tbody>
+            {% for call in recent_calls %}
+            <tr>
+              <td class="tight rail-cell {{ call.outcome }} num">{{ ui.when(call.started_at) }}</td>
+              <td class="tight mono">{{ call.caller or t('unknown') }}</td>
+              <td><a class="row-link" href="/calls/{{ call.id }}">{{ call.first_question or '—' }}</a></td>
+              <td class="tight">{{ ui.outcome(call.outcome) }}</td>
+            </tr>
+            {% else %}
+            <tr><td class="empty">{{ t('empty') }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <header><h2>{{ t('dash_live') }}</h2></header>
+        <div class="body">
+          {% if bridge %}
+            <div style="display:flex;align-items:center;gap:9px">
+              <span class="tag bot">{{ bridge.active_calls }}</span>
+              <span>{{ t('dash_service_ok') }}</span>
+            </div>
+          {% else %}
+            <div style="display:flex;align-items:center;gap:9px">
+              <span class="tag operator">!</span><span>{{ t('dash_service_down') }}</span>
+            </div>
+          {% endif %}
+          {% if figures.unhandled_calls %}
+            <p style="margin:12px 0 0">
+              <a class="btn small" href="/calls?unhandled=1">
+                {{ t('dash_unhandled') }}: {{ figures.unhandled_calls }}
+              </a>
+            </p>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="card">
+        <header><h2>{{ t('an_by_day') }}</h2></header>
+        <div class="body">{{ ui.stacked(week.by_day, 96) }}</div>
+      </section>
+
+      {% if unassigned %}
+      <section class="card">
+        <header><h2>{{ t('ticket_unassigned') }}</h2></header>
+        <table class="grid">
+          <tbody>
+            {% for ticket in unassigned %}
+            <tr>
+              <td class="tight mono">{{ ticket.number }}</td>
+              <td><a class="row-link" href="/tickets/{{ ticket.id }}">{{ ticket.subject }}</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,26 @@
+[Unit]
+Description=EduVoice CRM (call centre workplace)
+Wants=network-online.target
+After=network-online.target eduvoice-bridge.service
+
+[Service]
+User=eduvoice
+Group=eduvoice
+WorkingDirectory=/opt/eduvoice/app
+Environment=UV_PYTHON_INSTALL_DIR=/opt/eduvoice/.python
+Environment=UV_CACHE_DIR=/opt/eduvoice/.cache/uv
+ExecStart=/usr/local/bin/uv run --no-sync python -m crm.app
+# python exits with 143 on SIGTERM: that is a normal stop, not a failure
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=2
+
+# The CRM only reads the recordings and writes its own database.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+ReadWriteDirectories=/opt/eduvoice
+
+[Install]
+WantedBy=multi-user.target

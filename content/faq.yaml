@@ -1,0 +1,25 @@
+# Frequently asked questions, Uzbek only.
+# DRAFT — every answer must be checked against the regulations on lex.uz before the demo.
+# `keywords` let the bridge answer without the language model when the match is obvious.
+
+transfer_university:
+  keywords: [koʻchirish, koʻchmoqchi, boshqa universitet, boshqa oliy]
+  answer: >-
+    Boshqa oliy taʼlim muassasasiga oʻqishni koʻchirish uchun oʻquv yili boshlanishidan oldin
+    ariza topshiriladi. Aniq muddat va hujjatlar roʻyxatini universitetingiz devonxonasidan
+    aniqlang.
+  source: "QORALAMA — hujjat va band raqami toʻldirilishi kerak"
+
+stipend:
+  keywords: [stipendiya, stipendiyani, nafaqa]
+  answer: >-
+    Stipendiya davlat granti asosida oʻqiyotgan va imtihonlarni muvaffaqiyatli topshirgan
+    talabalarga beriladi. Miqdori va toʻlov tartibi universitet buyrugʻi bilan belgilanadi.
+  source: "QORALAMA — hujjat va band raqami toʻldirilishi kerak"
+
+academic_leave:
+  keywords: [akademik taʼtil, taʼtil olish, sogʻligʻim]
+  answer: >-
+    Akademik taʼtil sogʻliq holati yoki boshqa uzrli sabablarga koʻra tibbiy hujjat asosida
+    beriladi. Ariza va hujjatlar universitet rektorati nomiga topshiriladi.
+  source: "QORALAMA — hujjat va band raqami toʻldirilishi kerak"

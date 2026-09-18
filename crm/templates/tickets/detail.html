@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block heading %}{{ t('ticket') }} {{ ticket.number }}{% endblock %}
+{% block topbar %}{{ ui.status(ticket.status) }} {{ ui.priority(ticket.priority) }}{% endblock %}
+{% block content %}
+<div class="cols-2">
+  <div class="stack">
+    <section class="card">
+      <header><h2>{{ ticket.subject }}</h2></header>
+      <dl class="facts">
+        <div><dt>{{ t('ticket_created') }}</dt><dd class="num">{{ ui.when(ticket.created_at) }}</dd></div>
+        <div><dt>{{ t('ticket_due') }}</dt><dd class="num">{{ ui.when(ticket.due_at) }}</dd></div>
+        <div><dt>{{ t('ticket_author') }}</dt><dd>{{ ticket.author_name or '—' }}</dd></div>
+        <div><dt>{{ t('ticket_category') }}</dt><dd>{{ ticket.category or '—' }}</dd></div>
+      </dl>
+      {% if ticket.body %}<div class="body" style="white-space:pre-wrap">{{ ticket.body }}</div>{% endif %}
+    </section>
+
+    <section class="card">
+      <header><h2>{{ t('ticket_history') }}</h2></header>
+      <ul class="timeline">
+        {% for event in events %}
+        <li class="{{ 'comment' if event.kind == 'comment' else '' }}">
+          <div class="when num">{{ ui.when(event.created_at) }} · {{ event.author_name or '—' }} · {{ t('event_' + event.kind) }}</div>
+          {% if event.kind == 'status' %}<div>{{ t('status_' + event.text) }}</div>
+          {% elif event.text %}<div style="white-space:pre-wrap">{{ event.text }}</div>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      <form class="form body" method="post" action="/tickets/{{ ticket.id }}/comment">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field">
+          <label for="text">{{ t('ticket_add_comment') }}</label>
+          <textarea id="text" name="text" style="min-height:70px"></textarea>
+        </div>
+        <button class="btn" type="submit">{{ t('save') }}</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="card">
+      <header><h2>{{ t('actions') }}</h2></header>
+      <form class="form body" method="post" action="/tickets/{{ ticket.id }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field">
+          <label for="status">{{ t('ticket_status') }}</label>
+          <select id="status" name="status">
+            {% for value in statuses %}
+              <option value="{{ value }}" {% if ticket.status == value %}selected{% endif %}>{{ t('status_' + value) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="assignee">{{ t('ticket_assignee') }}</label>
+          <select id="assignee" name="assignee_id">
+            <option value="">{{ t('ticket_unassigned') }}</option>
+            {% for operator in operators %}
+              <option value="{{ operator.id }}" {% if ticket.assignee_id == operator.id %}selected{% endif %}>{{ operator.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="priority">{{ t('ticket_priority') }}</label>
+          <select id="priority" name="priority">
+            {% for value in priorities %}
+              <option value="{{ value }}" {% if ticket.priority == value %}selected{% endif %}>{{ t('priority_' + value) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="resolution">{{ t('ticket_resolution') }}</label>
+          <textarea id="resolution" name="resolution" style="min-height:70px">{{ ticket.resolution }}</textarea>
+        </div>
+        <button class="btn primary" type="submit">{{ t('save') }}</button>
+      </form>
+    </section>
+
+    {% if ticket.contact_id %}
+    <section class="card">
+      <header><h2>{{ t('contact') }}</h2></header>
+      <div class="body">
+        <div style="font-weight:600">{{ ticket.contact_name or t('unknown') }}</div>
+        <div class="mono muted">{{ ticket.contact_phone }}</div>
+        <p style="margin:12px 0 0"><a class="btn small" href="/contacts/{{ ticket.contact_id }}">{{ t('open') }}</a></p>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if calls %}
+    <section class="card">
+      <header><h2>{{ t('contact_calls') }}</h2></header>
+      <table class="grid">
+        <tbody>
+          {% for call in calls %}
+          <tr>
+            <td class="tight rail-cell {{ call.outcome }} num">{{ ui.when(call.started_at) }}</td>
+            <td><a class="row-link" href="/calls/{{ call.id }}">{{ call.first_question or '—' }}</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

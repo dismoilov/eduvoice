@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block heading %}{{ t('nav_analytics') }}{% endblock %}
+{% block topbar %}
+  <div class="switch">
+    {% for value in [7, 14, 30] %}
+      <a class="btn small" href="/analytics?days={{ value }}"
+         style="{% if days == value %}background:var(--rail);color:#fff;border-color:var(--rail){% endif %}">{{ value }}</a>
+    {% endfor %}
+  </div>
+  <a class="btn small" href="/analytics/export.csv">CSV</a>
+{% endblock %}
+{% block content %}
+<div class="stack">
+  <div class="tiles">
+    <div class="tile lead">
+      <div class="value num">{{ data.totals.calls }}</div>
+      <div class="label">{{ t('an_calls') }} · {{ days }} {{ t('an_period')|lower }}</div>
+    </div>
+    <div class="tile">
+      <div class="value num">{{ ((data.totals.bot + data.totals.dropped) / data.totals.calls * 100)|round|int if data.totals.calls else 0 }}<small>%</small></div>
+      <div class="label">{{ t('dash_no_operator') }}</div>
+    </div>
+    <div class="tile">
+      <div class="value num">{{ ui.ms(data.latency.average) }}</div>
+      <div class="label">{{ t('dash_avg') }}</div>
+    </div>
+    <div class="tile">
+      <div class="value num">{{ ui.ms(data.latency.median) }}</div>
+      <div class="label">{{ t('an_latency') }} · median</div>
+    </div>
+    <div class="tile">
+      <div class="value num">{{ ui.ms(data.latency.p90) }}</div>
+      <div class="label">{{ t('an_latency') }} · p90</div>
+    </div>
+    <div class="tile">
+      <div class="value num">{{ data.tickets.open }}</div>
+      <div class="label">{{ t('dash_open_tickets') }}</div>
+    </div>
+  </div>
+
+  <div class="cols">
+    <section class="card">
+      <header><h2>{{ t('an_by_day') }}</h2></header>
+      <div class="body">
+        {{ ui.stacked(data.by_day, 140) }}
+        <div style="display:flex;gap:16px;margin-top:10px;font-size:12.5px" class="muted">
+          <span><span class="tag bot">{{ data.totals.bot }}</span> {{ t('outcome_bot') }}</span>
+          <span><span class="tag operator">{{ data.totals.operator }}</span> {{ t('outcome_operator') }}</span>
+          <span><span class="tag dropped">{{ data.totals.dropped }}</span> {{ t('outcome_dropped') }}</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <header><h2>{{ t('an_by_hour') }}</h2></header>
+      <div class="body">
+        {% set hours = [] %}
+        {% for row in data.by_hour %}{% set _ = hours.append({'label': '%02d'|format(row.hour), 'calls': row.calls}) %}{% endfor %}
+        {{ ui.columns(hours, 'calls', 130) }}
+      </div>
+    </section>
+  </div>
+
+  <div class="cols">
+    <section class="card">
+      <header><h2>{{ t('an_topics') }}</h2></header>
+      <div class="body">
+        {% if data.topics %}{{ ui.bars(data.topics, 'topic', 'count') }}
+        {% else %}<div class="empty">{{ t('empty') }}</div>{% endif %}
+      </div>
+    </section>
+
+    <section class="card">
+      <header><h2>{{ t('kb_question') }}</h2></header>
+      <table class="grid">
+        <tbody>
+          {% for row in data.questions %}
+          <tr><td>{{ row.question }}</td><td class="tight right num muted">{{ row.count }}</td></tr>
+          {% else %}<tr><td class="empty">{{ t('empty') }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <header><h2>{{ t('an_operators') }}</h2></header>
+      <table class="grid">
+        <thead><tr><th>{{ t('user_name') }}</th><th class="right">{{ t('dash_open_tickets') }}</th><th class="right">{{ t('status_resolved') }}</th></tr></thead>
+        <tbody>
+          {% for row in data.operators %}
+          <tr><td>{{ row.name }}</td><td class="right num">{{ row.open or 0 }}</td><td class="right num">{{ row.done or 0 }}</td></tr>
+          {% else %}<tr><td class="empty">{{ t('empty') }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+</div>
+{% endblock %}

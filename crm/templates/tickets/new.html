@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block heading %}{{ t('ticket_new') }}{% endblock %}
+{% block content %}
+<section class="card" style="max-width:720px">
+  <form class="form body" method="post" action="/tickets/new">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field">
+      <label for="subject">{{ t('ticket_subject') }}</label>
+      <input id="subject" name="subject" autofocus>
+    </div>
+    <div class="field">
+      <label for="body">{{ t('ticket_body') }}</label>
+      <textarea id="body" name="body"></textarea>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="phone">{{ t('contact_phone') }}</label>
+        <input id="phone" name="phone" list="known-contacts" placeholder="998901234567">
+        <datalist id="known-contacts">
+          {% for contact in contacts %}<option value="{{ contact.phone }}">{{ contact.name }}</option>{% endfor %}
+        </datalist>
+      </div>
+      <div class="field">
+        <label for="category">{{ t('ticket_category') }}</label>
+        <input id="category" name="category">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="priority">{{ t('ticket_priority') }}</label>
+        <select id="priority" name="priority">
+          {% for value in ['low', 'normal', 'high'] %}
+            <option value="{{ value }}" {% if value == 'normal' %}selected{% endif %}>{{ t('priority_' + value) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="assignee">{{ t('ticket_assignee') }}</label>
+        <select id="assignee" name="assignee_id">
+          <option value="">{{ t('ticket_unassigned') }}</option>
+          {% for operator in operators %}
+            <option value="{{ operator.id }}" {% if operator.id == user.id %}selected{% endif %}>{{ operator.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn primary" type="submit">{{ t('create') }}</button>
+      <a class="btn" href="/tickets">{{ t('cancel') }}</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

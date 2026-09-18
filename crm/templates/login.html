@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="{{ lang }}" data-theme="{{ theme }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t('login_title') }} — EduVoice</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="login-page">
+  <form class="login-card form" method="post" action="/login">
+    <div>
+      <h1>EduVoice</h1>
+      <div class="sub">{{ t('app_sub') }}</div>
+    </div>
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="field">
+      <label for="login">{{ t('login') }}</label>
+      <input id="login" name="login" autofocus autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="password">{{ t('password') }}</label>
+      <input id="password" name="password" type="password" autocomplete="current-password">
+    </div>
+    {% if error %}<div class="error">{{ t(error, n=seconds|default(0)) }}</div>{% endif %}
+    <button class="btn primary" type="submit">{{ t('sign_in') }}</button>
+  </form>
+</body>
+</html>

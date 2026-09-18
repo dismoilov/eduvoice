@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block heading %}{{ t('nav_knowledge') }}{% endblock %}
+{% block topbar %}
+  <span class="tag published">{{ published }}</span>
+  {% if can(user, 'supervisor', 'admin') %}<a class="btn primary small" href="/knowledge/new">{{ t('kb_new') }}</a>{% endif %}
+{% endblock %}
+{% block content %}
+<section class="card">
+  <header><h2>{{ t('kb_hint') }}</h2></header>
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>{{ t('kb_id') }}</th><th>{{ t('kb_question') }}</th><th>{{ t('kb_source') }}</th>
+        <th class="right">{{ t('kb_used') }}</th><th>{{ t('kb_status') }}</th><th class="right">{{ t('kb_version') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in entries %}
+      <tr>
+        <td class="tight mono"><a class="row-link" href="/knowledge/{{ entry.id }}">{{ entry.faq_id }}</a></td>
+        <td>{{ entry.question or entry.answer[:70] }}</td>
+        <td class="muted">{{ entry.source or '—' }}</td>
+        <td class="tight right num">{{ entry.used_30d }}</td>
+        <td class="tight"><span class="tag {{ entry.status }}">{{ t('kb_' + entry.status) }}</span></td>
+        <td class="tight right num muted">{{ entry.version }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">{{ t('empty') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

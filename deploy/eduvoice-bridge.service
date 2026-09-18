@@ -1,0 +1,29 @@
+[Unit]
+Description=EduVoice voice bridge (AudioSocket + control API)
+# The bridge only needs the network; Asterisk may start before or after it, because a
+# call that arrives while the bridge is down is sent to the operator queue by the dialplan.
+Wants=network-online.target
+After=network-online.target freepbx.service
+
+[Service]
+User=eduvoice
+Group=eduvoice
+WorkingDirectory=/opt/eduvoice/app
+Environment=UV_PYTHON_INSTALL_DIR=/opt/eduvoice/.python
+Environment=UV_CACHE_DIR=/opt/eduvoice/.cache/uv
+ExecStart=/usr/local/bin/uv run --no-sync python -m eduvoice.main
+# python exits with 143 on SIGTERM: that is a normal stop, not a failure
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=2
+
+# Hardening: the bridge needs nothing but its own directory and the loopback interface.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+# ReadWriteDirectories, not ReadWritePaths: systemd 219 on Sangoma Linux 7 is old
+ReadWriteDirectories=/opt/eduvoice
+
+[Install]
+WantedBy=multi-user.target

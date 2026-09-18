@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block heading %}{{ t('nav_calls') }}{% endblock %}
+{% block content %}
+<section class="card">
+  <form class="filters auto" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="{{ t('search_hint') }}" style="min-width:220px">
+    <select name="outcome">
+      <option value="">{{ t('all') }}</option>
+      {% for value in ['bot', 'operator', 'dropped'] %}
+        <option value="{{ value }}" {% if outcome == value %}selected{% endif %}>{{ t('outcome_' + value) }}</option>
+      {% endfor %}
+    </select>
+    <input type="date" name="day" value="{{ day }}">
+    <label class="muted" style="display:flex;gap:6px;align-items:center;font-size:13px">
+      <input type="checkbox" name="unhandled" value="1" {% if unhandled %}checked{% endif %} style="width:auto">
+      {{ t('dash_unhandled') }}
+    </label>
+    <button class="btn small" type="submit">{{ t('filter') }}</button>
+    <a class="btn small" href="/calls">{{ t('reset') }}</a>
+    <div class="grow"></div>
+    <span class="muted num">{{ calls|length }}</span>
+  </form>
+
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>{{ t('call_time') }}</th>
+        <th>{{ t('call_number') }}</th>
+        <th>{{ t('kb_question') }}</th>
+        <th class="right">{{ t('call_duration') }}</th>
+        <th class="right">{{ t('call_questions') }}</th>
+        <th>{{ t('call_outcome') }}</th>
+        <th>{{ t('ticket') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for call in calls %}
+      <tr>
+        <td class="tight rail-cell {{ call.outcome }} num">{{ ui.when(call.started_at) }}</td>
+        <td class="tight mono">{{ call.caller or t('unknown') }}</td>
+        <td><a class="row-link" href="/calls/{{ call.id }}">{{ call.first_question or '—' }}</a></td>
+        <td class="tight right num">{{ ui.clock(call.duration_s) }}</td>
+        <td class="tight right num">{{ call.questions }}</td>
+        <td class="tight">{{ ui.outcome(call.outcome) }}</td>
+        <td class="tight">
+          {% if call.ticket_id %}<a class="mono" href="/tickets/{{ call.ticket_id }}">{{ call.ticket_number }}</a>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="empty">{{ t('empty') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

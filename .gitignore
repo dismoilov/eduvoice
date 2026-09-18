@@ -1,0 +1,17 @@
+*.db
+*.db-shm
+*.db-wal
+*.wav
+.DS_Store
+.coverage*
+.env
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+answer.wav
+audio/
+data/
+htmlcov/
+kit/
+logs/

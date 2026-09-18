@@ -1,0 +1,165 @@
+"""Turn taking: when the caller starts speaking, when the phrase ends, and barge-in.
+
+VoiceLab returns no interim transcripts, so the bridge itself has to decide where an
+utterance ends. Decisions are made on 20 ms frames of 8 kHz telephone audio with
+hysteresis, so one noisy frame never starts or ends a phrase.
+
+The speech test is injectable: production uses webrtcvad, tests use a deterministic stub.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections import deque
+from dataclasses import dataclass
+from typing import Protocol
+
+from eduvoice.audio import FRAME_MS, duration_ms, frame_bytes
+from eduvoice.config import Settings
+from eduvoice.config import settings as default_settings
+from eduvoice.interfaces import SAMPLE_RATE_TELEPHONY
+
+log = logging.getLogger("eduvoice.vad")
+
+KEEP_TAIL_FRAMES = 5  # 100 ms of silence kept at the end of an utterance
+
+
+class SpeechTest(Protocol):
+    def __call__(self, frame: bytes) -> bool: ...
+
+
+class WebrtcSpeechTest:
+    """webrtcvad: the only VAD that installs on the server (glibc 2.17)."""
+
+    def __init__(self, aggressiveness: int = 2, sample_rate: int = SAMPLE_RATE_TELEPHONY) -> None:
+        import webrtcvad  # imported here so tests can run without the extension
+
+        self._vad = webrtcvad.Vad(aggressiveness)
+        self._sample_rate = sample_rate
+
+    def __call__(self, frame: bytes) -> bool:
+        try:
+            return self._vad.is_speech(frame, self._sample_rate)
+        except Exception as exc:  # wrong frame size: treat as silence, never kill the call
+            log.warning("VAD rejected a %d-byte frame: %s", len(frame), exc)
+            return False
+
+
+@dataclass(frozen=True, slots=True)
+class Utterance:
+    """One finished phrase, ready to be sent for recognition."""
+
+    pcm8k: bytes
+    ended_by: str  # "silence" | "max_length"
+
+    @property
+    def duration_ms(self) -> float:
+        return duration_ms(self.pcm8k, SAMPLE_RATE_TELEPHONY)
+
+
+class SpeechDetector:
+    """Collects one utterance: pre-roll + speech, ends after a fixed silence."""
+
+    def __init__(
+        self, config: Settings | None = None, speech_test: SpeechTest | None = None
+    ) -> None:
+        cfg = config or default_settings
+        self._is_speech = speech_test or WebrtcSpeechTest(cfg.vad_aggressiveness)
+        self._start_needed = cfg.speech_start_frames
+        self._start_window = deque[bool](maxlen=cfg.speech_start_window)
+        self._silence_to_end = cfg.silence_end_frames
+        self._max_frames = int(cfg.max_utterance_s * 1000 / FRAME_MS)
+        self._preroll = deque[bytes](maxlen=max(1, int(cfg.preroll_ms / FRAME_MS)))
+        self._utterance = bytearray()
+        self._frame_bytes = frame_bytes(SAMPLE_RATE_TELEPHONY)
+        self._silence_frames = 0
+        self._idle_frames = 0
+        self.in_speech = False
+
+    def reset(self) -> None:
+        self._start_window.clear()
+        self._preroll.clear()
+        self._utterance.clear()
+        self._silence_frames = 0
+        self._idle_frames = 0
+        self.in_speech = False
+
+    def seed(self, frames: list[bytes]) -> None:
+        """Replay frames the caller already spoke (barge-in) as if they had just arrived.
+
+        Without this the first ~300 ms of an interruption — the frames that proved the
+        caller was talking — would be thrown away and recognition would get a fragment.
+        """
+        for frame in frames:
+            if len(frame) == self._frame_bytes:
+                self.push(frame)
+
+    @property
+    def silence_ms(self) -> float:
+        """How long the caller has been quiet while we are waiting for a phrase."""
+        return self._idle_frames * FRAME_MS
+
+    def push(self, frame: bytes) -> Utterance | None:
+        speech = self._is_speech(frame)
+
+        if not self.in_speech:
+            self._preroll.append(frame)
+            self._start_window.append(speech)
+            self._idle_frames = 0 if speech else self._idle_frames + 1
+            if sum(self._start_window) >= self._start_needed:
+                self.in_speech = True
+                self._utterance.extend(b"".join(self._preroll))
+                self._preroll.clear()
+                self._start_window.clear()
+                self._silence_frames = 0
+            return None
+
+        self._utterance.extend(frame)
+        self._silence_frames = 0 if speech else self._silence_frames + 1
+
+        if self._silence_frames >= self._silence_to_end:
+            return self._finish("silence")
+        if len(self._utterance) >= self._max_frames * self._frame_bytes:
+            return self._finish("max_length")
+        return None
+
+    def _finish(self, reason: str) -> Utterance:
+        pcm = bytes(self._utterance)
+        if reason == "silence":
+            # Drop the trailing silence but keep KEEP_TAIL_FRAMES (100 ms) so that a quiet
+            # last syllable is not clipped off before recognition.
+            trim_frames = max(0, self._silence_frames - KEEP_TAIL_FRAMES)
+            trim = min(len(pcm), trim_frames * self._frame_bytes)
+            pcm = pcm[: len(pcm) - trim]
+        self.reset()
+        return Utterance(pcm8k=pcm, ended_by=reason)
+
+
+class BargeInDetector:
+    """Says whether the caller is talking over the bot.
+
+    A short guard after playback starts ignores line echo of our own voice.
+    """
+
+    def __init__(
+        self, config: Settings | None = None, speech_test: SpeechTest | None = None
+    ) -> None:
+        cfg = config or default_settings
+        self._is_speech = speech_test or WebrtcSpeechTest(cfg.vad_aggressiveness)
+        self._needed = cfg.barge_in_frames
+        self._window = deque[bool](maxlen=cfg.barge_in_window)
+        self._guard_frames = int(cfg.barge_in_guard_ms / FRAME_MS)
+        self._frames_since_start = 0
+
+    def playback_started(self) -> None:
+        self._window.clear()
+        self._frames_since_start = 0
+
+    def push(self, frame: bytes) -> bool:
+        """True when the caller has been speaking long enough to interrupt."""
+        self._frames_since_start += 1
+        speech = self._is_speech(frame)
+        self._window.append(speech)
+        if self._frames_since_start <= self._guard_frames:
+            return False
+        return sum(self._window) >= self._needed
