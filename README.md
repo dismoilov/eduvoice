@@ -107,7 +107,7 @@ asterisk/             диалплан — исходник правды, деп
 content/              тексты: FAQ и служебные фразы (узбекский)
 deploy/               systemd-юниты моста и CRM
 docs/                 документация (см. ниже)
-tests/                177 тестов
+tests/                183 тестов
 ```
 
 ## Быстрый старт
@@ -156,7 +156,7 @@ make voice-prewarm ARGS=--dry-run                # что осталось оз�
 ## Качество кода
 
 ```
-177 тестов                 uv run pytest -q
+183 тестов                 uv run pytest -q
 линтер, формат, типы      ruff + mypy (make lint)
 ```
 

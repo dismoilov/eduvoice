@@ -14,7 +14,7 @@ make check
 ```
 
 Ожидается: `All checks passed!` от линтера, `Success: no issues found` от проверки типов
-и `177 passed` от тестов.
+и `183 passed` от тестов.
 
 ```bash
 uv run pytest -q --cov=eduvoice --cov-report=term
