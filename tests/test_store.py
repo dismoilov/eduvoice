@@ -87,9 +87,20 @@ def test_saving_a_call_twice_does_not_duplicate_it(db):
 
 
 def test_outcomes_tell_the_three_cases_apart():
-    assert outcome_of("hangup", "goodbye") == "bot"
-    assert outcome_of("operator", "transfer") == "operator"
-    assert outcome_of("operator", "caller_hangup") == "dropped"
+    assert outcome_of("hangup", "goodbye", 1) == "bot"
+    assert outcome_of("operator", "transfer", 0) == "operator"
+    assert outcome_of("operator", "caller_hangup", 0) == "dropped"
+
+
+def test_hanging_up_after_the_answer_counts_as_served():
+    """The commonest happy ending on a real line: the answer is heard, the call ends.
+
+    `next_action` is still "operator" at that moment — that is the safety default, not a
+    transfer — so only the delivered answer distinguishes this from someone who gave up
+    during the greeting.
+    """
+    assert outcome_of("operator", "caller_hangup", 1) == "bot"
+    assert outcome_of("operator", "caller_hangup", 0) == "dropped"
 
 
 def test_transcripts_are_searchable(db):

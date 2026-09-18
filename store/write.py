@@ -17,15 +17,25 @@ from store.db import connect, migrate, now, transaction
 
 log = logging.getLogger("store.write")
 
-OUTCOME_BOT = "bot"  # the assistant finished the conversation itself
+OUTCOME_BOT = "bot"  # the assistant answered and no person was needed
 OUTCOME_OPERATOR = "operator"  # handed over to a person
-OUTCOME_DROPPED = "dropped"  # the caller hung up first
+OUTCOME_DROPPED = "dropped"  # the call ended with nothing delivered
 
 
-def outcome_of(next_action: str, ended_reason: str) -> str:
-    """One word for how a call ended — the first thing a supervisor looks at."""
+def outcome_of(next_action: str, ended_reason: str, answered: int = 0) -> str:
+    """One word for how a call ended — the first thing a supervisor looks at.
+
+    Someone who hears their answer and hangs up has been served, so the assistant gets
+    the credit; `dropped` is kept for calls where nothing was delivered. Judging this by
+    who hung up first would file a finished conversation as a failure, and the caller who
+    gave up during the greeting as a success — the two mistakes that matter most here,
+    because this is the number a supervisor reads first.
+
+    `next_action` cannot decide it: it stays "operator" for most of a call on purpose, so
+    that a bridge that dies mid-sentence sends the caller to a person rather than nowhere.
+    """
     if ended_reason == "caller_hangup":
-        return OUTCOME_DROPPED
+        return OUTCOME_BOT if answered else OUTCOME_DROPPED
     if next_action == "hangup":
         return OUTCOME_BOT
     return OUTCOME_OPERATOR
@@ -76,7 +86,9 @@ def save_call(connection: sqlite3.Connection, entry: dict[str, Any]) -> int:
                 entry.get("direction", "in"),
                 entry.get("started_at") or now(),
                 _float(entry.get("duration_s")),
-                outcome_of(entry.get("next_action", ""), entry.get("ended_reason", "")),
+                outcome_of(
+                    entry.get("next_action", ""), entry.get("ended_reason", ""), len(answered)
+                ),
                 entry.get("ended_reason", ""),
                 entry.get("next_action", ""),
                 entry.get("recording", ""),

@@ -217,6 +217,14 @@ MIGRATIONS: list[str] = [
     CREATE INDEX ticket_events_order ON ticket_events(ticket_id, id);
     CREATE INDEX callbacks_assignee ON callbacks(assignee_id, status);
     """,
+    # 4 — calls recorded before the outcome rule was corrected. A caller who heard the
+    #     whole answer and then hung up was filed as "dropped", which both hid the
+    #     assistant's work and let a silent hang-up count towards "handled without an
+    #     operator". Only calls that actually delivered an answer are moved.
+    """
+    UPDATE calls SET outcome = 'bot'
+     WHERE outcome = 'dropped' AND ended_reason = 'caller_hangup' AND questions > 0;
+    """,
 ]
 
 _local = threading.local()

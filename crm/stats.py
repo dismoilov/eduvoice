@@ -31,7 +31,8 @@ def dashboard(db: sqlite3.Connection, user_id: int) -> dict[str, Any]:
     """
     day = today()
     calls = db.execute(
-        "SELECT count(*) AS total, sum(outcome != 'operator') AS without_operator"
+        # 'bot' and not "anything but operator": a caller who hung up in silence was not served
+        "SELECT count(*) AS total, sum(outcome = 'bot') AS without_operator"
         " FROM calls WHERE substr(started_at,1,10) = ?",
         (day,),
     ).fetchone()
