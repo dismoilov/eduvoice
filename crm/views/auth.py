@@ -34,7 +34,10 @@ def login(
         # Without this another site could log an operator into an account it controls.
         return page(request, "login.html", None, next=safe_path(next), error="login_failed")
 
-    blocked = throttle.blocked_for(login)
+    # The address the attempt came from, so that guessing at one machine cannot lock an
+    # operator out at another.
+    source = request.client.host if request.client else ""
+    blocked = throttle.blocked_for(login, source)
     if blocked:
         return page(
             request,
@@ -47,11 +50,11 @@ def login(
 
     user = repo.user_by_login(db, login)
     if user is None or not verify_password(password, user["password_hash"]):
-        throttle.failed(login)
+        throttle.failed(login, source)
         repo.audit(db, user_id=None, login=login, action="login_failed")
         return page(request, "login.html", None, next=safe_path(next), error="login_failed")
 
-    throttle.passed(login)
+    throttle.passed(login, source)
     repo.audit(db, user_id=user["id"], login=user["login"], action="login")
     response = redirect(safe_path(next))
     response.set_cookie(

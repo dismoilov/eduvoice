@@ -772,3 +772,42 @@ def test_a_subject_is_a_line_not_an_essay(client):
     card = client.get(answer.headers["location"]).text
     assert "x" * 5000 not in card
     assert "x" * 200 in card, "the beginning of the subject should still be there"
+
+
+def test_a_twenty_digit_row_id_is_answered_not_crashed(client):
+    """SQLite refuses to bind anything wider than 64 bits, and that escaped as a bare 500.
+
+    It is reachable by editing the address bar, which is exactly what someone examining
+    the system does.
+    """
+    sign_in(client, "boss")
+    huge = "9" * 25
+
+    for path in (f"/calls/{huge}", f"/tickets/{huge}", f"/contacts/{huge}", f"/knowledge/{huge}"):
+        answer = client.get(path)
+        assert answer.status_code == 404, f"{path} answered {answer.status_code}"
+
+
+def test_padding_the_login_does_not_open_a_fresh_set_of_guesses(client):
+    """The counter used the text as typed while the account was found with it trimmed, so
+    " operator" and "operator " were separate counters onto the same account — unlimited
+    guessing for anyone who presses the space bar first."""
+    from crm.config import settings as crm_settings
+
+    for _ in range(crm_settings.login_attempts + 1):
+        client.post(
+            "/login", data={"login": "operator", "password": "wrong", "csrf": _token(client)}
+        )
+
+    padded = client.post(
+        "/login", data={"login": " operator ", "password": PASSWORD, "csrf": _token(client)}
+    )
+    assert padded.status_code == 200, "a padded login walked straight past the throttle"
+    assert client.get("/calls").status_code == 303, "and it must not have created a session"
+
+
+def _token(client: TestClient) -> str:
+    form = client.get("/login")
+    marker = 'name="csrf" value="'
+    start = form.text.index(marker) + len(marker)
+    return form.text[start : form.text.index('"', start)]

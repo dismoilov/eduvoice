@@ -94,6 +94,17 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         log.warning("database error on %s: %s", request.url.path, exc)
         return page(request, "error.html", None, status_code=503, code=503, message="db_busy")
 
+    @application.exception_handler(OverflowError)
+    async def _number_too_large(request: Request, exc: OverflowError):
+        """A row id of twenty digits is not a row that exists — it is a typed-in URL.
+
+        SQLite raises this when binding a value wider than 64 bits, and it escaped as a
+        bare 500 with a traceback in the log. The honest answer is that there is no such
+        record.
+        """
+        log.info("number out of range on %s: %s", request.url.path, exc)
+        return page(request, "error.html", None, status_code=404, code=404, message="empty")
+
     @application.get("/health", include_in_schema=False)
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "eduvoice-crm"}

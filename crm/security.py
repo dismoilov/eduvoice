@@ -119,22 +119,39 @@ def csrf_ok(secret: bytes, cookie: str | None, token: str | None) -> bool:
 
 
 class LoginThrottle:
-    """Slows down password guessing: a few wrong tries and that login waits."""
+    """Slows down password guessing: a few wrong tries and that login waits.
+
+    Counted per login *and* per machine, both normalised. Two mistakes were possible here
+    and both were made:
+
+    · The key was the text exactly as submitted, while the account was looked up with the
+      spaces trimmed off. So " operator" and "operator  " were separate counters that
+      opened the same account, and an attacker could guess for ever simply by padding the
+      field — defeating the only guessing control the CRM has.
+    · Counting by login alone lets anyone keep a real operator locked out of their own
+      account for as long as they care to keep trying. Including the caller's address
+      means that costs the attacker their own address, not the operator's shift.
+    """
 
     def __init__(self, attempts: int, block_s: int) -> None:
         self._attempts = attempts
         self._block_s = block_s
-        self._failures: dict[str, list[float]] = {}
+        self._failures: dict[tuple[str, str], list[float]] = {}
 
-    def blocked_for(self, login: str) -> int:
-        recent = [t for t in self._failures.get(login, []) if time.time() - t < self._block_s]
-        self._failures[login] = recent
+    @staticmethod
+    def key(login: str, source: str = "") -> tuple[str, str]:
+        return (login.strip().casefold(), source)
+
+    def blocked_for(self, login: str, source: str = "") -> int:
+        key = self.key(login, source)
+        recent = [t for t in self._failures.get(key, []) if time.time() - t < self._block_s]
+        self._failures[key] = recent
         if len(recent) < self._attempts:
             return 0
         return int(self._block_s - (time.time() - recent[0]))
 
-    def failed(self, login: str) -> None:
-        self._failures.setdefault(login, []).append(time.time())
+    def failed(self, login: str, source: str = "") -> None:
+        self._failures.setdefault(self.key(login, source), []).append(time.time())
 
-    def passed(self, login: str) -> None:
-        self._failures.pop(login, None)
+    def passed(self, login: str, source: str = "") -> None:
+        self._failures.pop(self.key(login, source), None)
