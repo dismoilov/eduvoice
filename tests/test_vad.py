@@ -96,6 +96,7 @@ def test_barge_in_ignores_echo_right_after_playback_starts():
     cfg = replace(base_settings, barge_in_frames=15, barge_in_window=20, barge_in_guard_ms=500)
     detector = BargeInDetector(cfg, speech_test=lambda _frame: True)
     detector.playback_started()
+    detector.playback_audible()
 
     # guard = 25 frames: everything inside it is ignored even if it looks like speech
     assert all(detector.push(SPEECH) is False for _ in range(25))
@@ -107,6 +108,7 @@ def test_barge_in_needs_sustained_speech_not_one_noisy_frame():
     cfg = replace(base_settings, barge_in_frames=15, barge_in_window=20, barge_in_guard_ms=0)
     detector = BargeInDetector(cfg, speech_test=scripted(True, False, True, False))
     detector.playback_started()
+    detector.playback_audible()
 
     assert not any(detector.push(SPEECH) for _ in range(20))
 
@@ -138,3 +140,22 @@ def test_seed_replays_the_start_of_an_interrupted_phrase():
     assert utterance is not None
     # 5 seeded + 3 spoken frames must all be there (pre-roll may add a little more).
     assert utterance.duration_ms >= 8 * 20
+
+
+def test_nobody_can_interrupt_a_phrase_that_has_not_been_played_yet():
+    """The guard exists to ignore our own voice echoing back, so it starts with the voice.
+
+    Started when the phrase was merely *requested*, it was spent on the silence while the
+    answer was being synthesised — and a caller saying "hello?" into that gap cancelled an
+    answer they had not heard one sample of. The synthesis is paid for, is not cached when
+    it is abandoned, and the question comes round again.
+    """
+    cfg = replace(base_settings, barge_in_frames=3, barge_in_window=5, barge_in_guard_ms=100)
+    detector = BargeInDetector(cfg, speech_test=lambda _frame: True)
+
+    detector.playback_started()  # synthesis begins; the line is silent
+    assert all(detector.push(SPEECH) is False for _ in range(50)), "interrupted silence"
+
+    detector.playback_audible()  # the first sound reaches the caller
+    assert all(detector.push(SPEECH) is False for _ in range(5)), "the guard did not restart"
+    assert any(detector.push(SPEECH) for _ in range(10)), "a real interruption was ignored"

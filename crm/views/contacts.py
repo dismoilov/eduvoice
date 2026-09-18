@@ -14,6 +14,23 @@ from crm.views.common import require_csrf
 
 router = APIRouter(prefix="/contacts")
 
+
+def _when(raw: str) -> str:
+    """The moment a callback is due, in the one format the rest of the database uses.
+
+    The picker sends `2026-09-19T09:00` while the default was written with a space, and
+    the list is ordered by the text — so `T` sorted after the space and the later call
+    came first. Anything unparseable becomes two hours from now rather than a row that
+    renders as nonsense and sorts anywhere.
+    """
+    text = (raw or "").strip().replace("T", " ")
+    for shape in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(text, shape).strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            continue
+    return (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%d %H:%M")
+
 # Only these two messages can appear: the value arrives in the URL.
 NOTICES = {"call_back_started": "call_back_started", "call_back_failed": "call_back_failed"}
 KINDS = ("applicant", "student", "parent", "other")
@@ -117,6 +134,6 @@ def contact_callback(
     db: sqlite3.Connection = Depends(get_db),
 ):
     require_csrf(request, csrf)
-    when = due_at or (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%d %H:%M")
+    when = _when(due_at)
     repo.create_callback(db, contact_id=contact_id, due_at=when, assignee_id=int(user["id"]))
     return redirect(f"/contacts/{contact_id}")

@@ -112,6 +112,23 @@
         <div class="body">{{ ui.stacked(week, 96) }}</div>
       </section>
 
+      {% if callbacks %}
+      <section class="card">
+        <header><h2>{{ t('dash_callbacks') }}</h2></header>
+        <table class="grid">
+          <tbody>
+            {% for back in callbacks %}
+            <tr>
+              <td class="tight num">{{ back.due_at }}</td>
+              <td class="tight mono">{{ back.phone or t('unknown') }}</td>
+              <td><a class="row-link" href="/contacts/{{ back.contact_id }}">{{ back.contact_name or t('unknown') }}</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+      {% endif %}
+
       {% if unassigned %}
       <section class="card">
         <header><h2>{{ t('ticket_unassigned') }}</h2></header>

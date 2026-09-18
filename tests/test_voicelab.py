@@ -219,3 +219,50 @@ async def test_the_model_reply_is_parsed(monkeypatch):
     )
 
     assert answer == {"intent": "faq", "faq_id": "stipend"}
+
+
+async def test_speech_at_the_wrong_sample_rate_is_refused_not_cached(tmp_path):
+    """The bridge resamples 24 kHz to the telephone's 8 kHz without asking.
+
+    So a reply at any other rate plays at the wrong speed — and, left unchecked, was
+    written into the cache under the text's hash and replayed to every later caller. An
+    error here sends this one caller to a person; a cached file would spoil the answer
+    for good.
+    """
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, content=wav_bytes(rate=16000), headers={"content-type": "audio/wav"}
+        )
+
+    speech = VoiceLabTextToSpeech("key", "voice_1", cache_dir=tmp_path)
+    speech._client = service(handler)
+
+    with pytest.raises(TtsError) as failure:
+        [chunk async for chunk in speech.stream("salom", "uz")]
+    assert "16000" in str(failure.value)
+    assert list(tmp_path.glob("*.pcm")) == [], "broken audio must not reach the cache"
+    await speech.close()
+
+
+async def test_an_answer_that_is_not_a_json_object_is_a_clean_error():
+    """A proxy or a captive portal can answer with an array, or with HTML.
+
+    `body.get(...)` on that raises AttributeError, which is not one of the three error
+    types the bridge knows how to turn into "a person will help you".
+    """
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[1, 2, 3])
+
+    stt = VoiceLabSpeechToText("key", timeout_s=2)
+    stt._client = service(handler)
+    with pytest.raises(SttError):
+        await stt.transcribe(PCM)
+    await stt.close()
+
+    model = VoiceLabChatModel("key")
+    model._client = service(handler)
+    with pytest.raises(LlmError):
+        await model.complete_json([ChatMessage("user", "salom")], timeout_s=2)
+    await model.close()

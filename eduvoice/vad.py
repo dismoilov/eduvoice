@@ -150,13 +150,29 @@ class BargeInDetector:
         self._window = deque[bool](maxlen=cfg.barge_in_window)
         self._guard_frames = int(cfg.barge_in_guard_ms / FRAME_MS)
         self._frames_since_start = 0
+        self._audible = False
 
     def playback_started(self) -> None:
+        """A phrase has been asked for — nothing is in the caller's ear yet."""
         self._window.clear()
         self._frames_since_start = 0
+        self._audible = False
+
+    def playback_audible(self) -> None:
+        """The first sound of it has actually gone down the line; the guard starts here.
+
+        Starting the guard when the phrase was *requested* spent it on the silence while
+        the answer was being synthesised. The caller saying "hello?" into that gap then
+        cancelled an answer they had not heard one sample of — paid for, uncached, and the
+        question asked again. Nobody can interrupt what has not been played.
+        """
+        self._frames_since_start = 0
+        self._audible = True
 
     def push(self, frame: bytes) -> bool:
         """True when the caller has been speaking long enough to interrupt."""
+        if not self._audible:
+            return False
         self._frames_since_start += 1
         speech = self._is_speech(frame)
         self._window.append(speech)

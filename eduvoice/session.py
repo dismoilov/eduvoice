@@ -250,15 +250,20 @@ class CallSession:
         """
         try:
             if prompt_id is not None:
-                self._out.write(
-                    await asyncio.wait_for(
-                        self._prompts.audio(prompt_id, self._tts),
-                        timeout=self._cfg.tts_first_chunk_timeout_s + 5.0,
-                    )
+                pcm = await asyncio.wait_for(
+                    self._prompts.audio(prompt_id, self._tts),
+                    timeout=self._cfg.tts_first_chunk_timeout_s + 5.0,
                 )
+                self._barge.playback_audible()
+                self._out.write(pcm)
             else:
                 await self._stream_answer(text)
-            await self._out.wait_drained(timeout=self._cfg.max_call_s)
+            # As long as the audio itself takes, plus the same grace the closing
+            # phrase gets. Waiting the whole call limit here would park a call in
+            # `speaking` for six minutes if the pacer ever died without draining.
+            await self._out.wait_drained(
+                timeout=self._out.queued_ms / 1000 + CLOSING_DRAIN_TIMEOUT_S
+            )
         except asyncio.CancelledError:
             raise
         except (ProviderError, TimeoutError) as exc:
@@ -298,6 +303,8 @@ class CallSession:
                     chunk = await asyncio.wait_for(chunks.__anext__(), timeout=timeout)
                 except StopAsyncIteration:
                     break
+                if first:
+                    self._barge.playback_audible()
                 first = False
                 self._out.write(converter.push(chunk))
             self._out.write(converter.flush())
@@ -516,7 +523,7 @@ class CallSession:
                 await self._think_task
         self._think_task = None
         await self._out.aclose()
-        for provider in (self._stt, self._tts):
+        for provider in (self._stt, self._tts, self._brain):
             with contextlib.suppress(Exception):
                 await provider.close()
         self._registry.finish(self.call_id)

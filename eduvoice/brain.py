@@ -63,6 +63,17 @@ class Brain:
         self._max_turns = max_turns
         self.unclear_streak = 0
 
+    async def close(self) -> None:
+        """Releases whatever the model holds open.
+
+        The providers are built per call, so a model that keeps a connection — as the real
+        one now does, to save a TLS handshake on every turn — would otherwise leak one
+        socket per caller.
+        """
+        closer = getattr(self._model, "close", None)
+        if closer is not None:
+            await closer()
+
     def _faq_catalogue(self) -> str:
         if not self._faq:
             return "FAQ list is empty."

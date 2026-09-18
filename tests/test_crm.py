@@ -547,3 +547,28 @@ def test_logging_out_needs_a_form_and_a_token(client):
 
     assert client.post("/logout", data={"csrf": token(client)}).headers["location"] == "/login"
     assert client.get("/calls").status_code == 303, "the session should be gone"
+
+
+def test_a_planned_callback_shows_on_the_dashboard(client, world):
+    """A promise to ring a citizen back was recorded, counted, and then shown nowhere.
+
+    It only appeared inside one contact's card, so an operator who made the promise had
+    no list of them anywhere and could simply forget.
+    """
+    from crm import repo
+
+    db = open_database(world)
+    operator = repo.user_by_login(db, "operator")
+    contact = repo.contacts(db, limit=1)[0]
+    repo.create_callback(
+        db,
+        contact_id=int(contact["id"]),
+        due_at="2026-09-19 09:00",
+        assignee_id=int(operator["id"]),
+    )
+    db.close()
+
+    sign_in(client, "operator")
+    page = client.get("/").text
+
+    assert "2026-09-19 09:00" in page, "the planned callback is not on the dashboard"

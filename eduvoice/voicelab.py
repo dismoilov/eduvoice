@@ -71,11 +71,19 @@ def _wav(pcm: bytes, sample_rate: int) -> bytes:
 
 
 def _pcm_from_wav(data: bytes) -> bytes:
-    """Takes the samples out of a WAV; a header in the middle of a stream is a click."""
+    """Takes the samples out of a WAV; a header in the middle of a stream is a click.
+
+    The format is checked rather than merely logged. The bridge resamples 24 kHz to the
+    telephone's 8 kHz unconditionally, so audio at any other rate plays at the wrong
+    speed — and, worse, would be written into the cache under the text's hash and replayed
+    to every future caller. Refusing it hands this caller to a person instead.
+    """
     with wave.open(io.BytesIO(data), "rb") as handle:
-        if handle.getframerate() != SAMPLE_RATE_TTS:
-            log.warning(
-                "synthesis returned %d Hz, expected %d", handle.getframerate(), SAMPLE_RATE_TTS
+        rate, channels, width = handle.getframerate(), handle.getnchannels(), handle.getsampwidth()
+        if (rate, channels, width) != (SAMPLE_RATE_TTS, 1, 2):
+            raise TtsError(
+                f"synthesis returned {rate} Hz, {channels} channel(s), {width * 8}-bit; "
+                f"expected {SAMPLE_RATE_TTS} Hz mono 16-bit"
             )
         return handle.readframes(handle.getnframes())
 
@@ -86,11 +94,19 @@ def _nothing_heard() -> Transcript:
     return Transcript(text="", language="uz", duration_ms=0, latency_ms=0)
 
 
+def _body(response: httpx.Response) -> dict:
+    """The JSON object of a response, or an empty one — a proxy may answer anything."""
+    try:
+        parsed = response.json()
+    except ValueError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def _describe(response: httpx.Response) -> str:
     """A short, honest reason for the log, with the id their support will ask for."""
-    try:
-        body = response.json()
-    except ValueError:
+    body = _body(response)
+    if not body:
         return f"HTTP {response.status_code}"
     error = body.get("error") or {}
     return (
@@ -134,15 +150,16 @@ class VoiceLabSpeechToText:
 
         started = time.monotonic()
         if response.status_code == 200:  # short audio may come back at once
-            return self._as_transcript(response.json(), started)
+            return self._as_transcript(_body(response), started)
         if response.status_code == 202:
-            return await self._collect(response.json()["id"], started)
+            job_id = _body(response).get("id")
+            if not job_id:
+                raise SttError(f"recognition was queued without an id: {_describe(response)}")
+            return await self._collect(str(job_id), started)
 
-        body = (
-            response.json()
-            if response.headers.get("content-type", "").startswith("application/json")
-            else {}
-        )
+        # Checked whatever the content type claims: a caller who said nothing must be
+        # asked to repeat, not handed to an operator because a header was missing.
+        body = _body(response)
         if (body.get("error") or {}).get("code") == "no_speech_detected":
             return _nothing_heard()
         raise SttError(_describe(response))
@@ -158,7 +175,7 @@ class VoiceLabSpeechToText:
                 raise SttError(f"could not collect the transcript: {exc}") from exc
             if answer.status_code != 200:
                 raise SttError(_describe(answer))
-            body = answer.json()
+            body = _body(answer)
             status = body.get("status")
             if status in ("completed", "done"):
                 return self._as_transcript(body, started)
@@ -170,6 +187,8 @@ class VoiceLabSpeechToText:
 
     @staticmethod
     def _as_transcript(body: dict, started: float) -> Transcript:
+        if not body:
+            raise SttError("recognition answered with something that is not JSON")
         return Transcript(
             text=(body.get("transcript") or "").strip(),
             language="uz",
@@ -273,6 +292,7 @@ class VoiceLabChatModel:
     def __init__(self, api_key: str, model: str = "aisha-comet") -> None:
         self._key = api_key
         self._model = model
+        self._client: httpx.AsyncClient | None = None
 
     async def complete_json(self, messages: list[ChatMessage], timeout_s: float) -> dict:
         payload: dict[str, Any] = {
@@ -281,16 +301,19 @@ class VoiceLabChatModel:
             "max_tokens": 400,
             "temperature": 0.2,
         }
+        if self._client is None:
+            # One connection for the whole call, as with recognition and synthesis: a new
+            # DNS lookup and TLS handshake on every turn came out of the caller's patience.
+            self._client = httpx.AsyncClient(
+                base_url=BASE_URL,
+                timeout=timeout_s,
+                headers={"Authorization": f"Bearer {self._key}"},
+            )
         try:
             # The account allows two generations at a time; the gate keeps us inside that.
-            async with (
-                self._gate,
-                httpx.AsyncClient(base_url=BASE_URL, timeout=timeout_s) as client,
-            ):
-                response = await client.post(
-                    "/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {self._key}"},
-                    json=payload,
+            async with self._gate:
+                response = await self._client.post(
+                    "/v1/chat/completions", json=payload, timeout=timeout_s
                 )
         except httpx.HTTPError as exc:
             raise LlmError(f"could not reach the model: {exc}") from exc
@@ -298,10 +321,15 @@ class VoiceLabChatModel:
             raise LlmError(_describe(response))
 
         try:
-            content = response.json()["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, ValueError) as exc:
+            content = _body(response)["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
             raise LlmError(f"unexpected reply shape: {exc}") from exc
         return _as_json(content)
+
+    async def close(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
 
 def _as_json(content: str) -> dict:
