@@ -142,6 +142,7 @@ make panel-on PANEL_PASSWORD='пароль'            # включить пан
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Сервер, деплой, диагностика, безопасность и приватность |
 | [docs/AUDIT.md](docs/AUDIT.md) | Независимый аудит кода и что по нему исправлено |
 | [docs/VOICELAB-TASKS.md](docs/VOICELAB-TASKS.md) | Задачи человека B: подключение VoiceLab |
+| [docs/pitch/](docs/pitch/) | Презентация для технической защиты (узбекский, открывается офлайн) |
 | [CLAUDE.md](CLAUDE.md) | Сжатый контекст всего проекта — для нового человека или ИИ-ассистента |
 | [PLAN.md](PLAN.md) | Полный план проекта |
 | [TASKS.md](TASKS.md) | Маршрут работ с отметками о проверке каждого шага |

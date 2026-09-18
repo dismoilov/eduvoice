@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EduVoice — texnik himoya</title>
+<style>
+  /* Yakka fayl: internet, shrift yuklash va yigʻish bosqichi kerak emas.
+     Har bir slayd 1920x1080 kanvas; oyna oʻlchamiga moslab kichraytiriladi. */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0A121B; color: #F2EFE9; overflow: hidden;
+    font-family: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  #canvas { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: top left; }
+  /* Har bir slaydning oʻz `style` atributida display bor, shuning uchun !important kerak */
+  section { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  section:not(.on) { display: none !important; }
+  section * { box-sizing: border-box; }
+  h1, h2, h3, p, ul, ol, table { margin: 0; }
+  ul, ol { padding-left: 34px; }
+  li { margin-bottom: 8px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { padding: 12px 16px; border: 1px solid rgba(128,128,128,0.28); text-align: left; }
+  /* Boshqaruv paneli */
+  #bar {
+    position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 16px;
+    padding: 10px 18px; background: rgba(10,18,27,0.92); font-size: 13px; color: #8FA3B5;
+    border-top: 1px solid #1B2A3A;
+  }
+  #bar button {
+    background: #16283A; border: 1px solid #23394F; color: #C8D3DE; padding: 6px 12px;
+    cursor: pointer; font: inherit; font-size: 13px;
+  }
+  #bar button:hover { border-color: #E3A648; color: #F2EFE9; }
+  #count { font-variant-numeric: tabular-nums; }
+  #notes {
+    position: fixed; left: 0; right: 0; bottom: 42px; max-height: 38vh; overflow: auto;
+    padding: 18px 24px; background: rgba(10,18,27,0.97); border-top: 1px solid #1B2A3A;
+    font-size: 17px; line-height: 1.5; color: #C8D3DE; display: none;
+  }
+  #notes.on { display: block; }
+  /* Chop etish: har slayd bitta sahifa, gorizontal A4 */
+  @page { size: 1920px 1080px; margin: 0; }
+  @media print {
+    body { background: #fff; overflow: visible; }
+    #bar, #notes { display: none !important; }
+    #stage { position: static; overflow: visible; }
+    #canvas { position: static; width: 1920px; height: auto; transform: none !important; }
+    section { position: static; display: flex !important; page-break-after: always; break-after: page; }
+  }
+</style>
+</head>
+<body>
+<div id="stage"><div id="canvas">
+<section id="cover" data-transition="fade" style="background:#10202F; color:#F2EFE9; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px; display:flex; flex-direction:column; justify-content:space-between">
+  <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:26px; letter-spacing:3px; color:#E3A648; text-transform:uppercase">Texnik himoya · 5 mezon</p>
+  <div style="display:flex; flex-direction:column; gap:32px">
+    <h1 style="font-size:150px; font-weight:600; line-height:1; letter-spacing:-4px">EduVoice</h1>
+    <p style="font-size:46px; line-height:1.35; color:#C8D3DE; width:1500px">Oliy taʼlim vazirligi call-markazi uchun oʻzbek tilida gaplashadigan AI-operator va unga ulangan CRM</p>
+  </div>
+  <div style="display:flex; gap:72px; align-items:baseline">
+    <p style="font-size:28px; color:#8FA3B5">Umummilliy AI Xakaton · Xorazm · 2026</p>
+    <p style="font-size:28px; color:#8FA3B5">Masala №5 va №3</p>
+    <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:28px; color:#8FA3B5">github.com/dismoilov/eduvoice</p>
+  </div>
+  
+</section>
+<section id="holat" style="background:#F7F5F1; color:#10202F; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:40px">
+  <h2 style="font-size:68px; font-weight:600; line-height:1.1">Bugun nima ishlayapti</h2>
+  <table style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:30px; color:#10202F; border:1px solid #DDD8CF">
+    <tr style="background:#10202F"><th style="width:62%; color:#F2EFE9; padding:14px 18px; text-align:left">Tizim qismi</th><th style="width:38%; color:#F2EFE9; text-align:left">Holati</th></tr>
+    <tr><td>Telefoniya: FreePBX/Asterisk, oʻzbekcha IVR, operator navbati</td><td style="color:#0E7C4A">Serverda ishlayapti</td></tr>
+    <tr style="background:#FFFFFF"><td>Koʻprik: suhbat, boʻlib gapirish, operatorga uzatish, yozuv</td><td style="color:#0E7C4A">Serverda ishlayapti</td></tr>
+    <tr><td>CRM: qoʻngʻiroqlar, murojaatlar, fuqarolar, tahlil</td><td style="color:#0E7C4A">Serverda ishlayapti</td></tr>
+    <tr style="background:#FFFFFF"><td>Bilimlar bazasi yordamchining nutqini boshqaradi</td><td style="color:#0E7C4A">Jonli qoʻngʻiroqda tasdiqlandi</td></tr>
+    <tr><td>Haqiqiy oʻzbek nutqi — VoiceLab</td><td style="color:#B8730C">B dasturchida; hozir zaxira modul</td></tr>
+  </table>
+  <p style="font-size:32px; color:#4A5A6B; line-height:1.4; width:1600px">Zaxira modul — bu maketning oʻzi emas: butun suhbat mantiqi, telefoniya va CRM u bilan toʻliq ishlaydi. VoiceLab ulanganda bitta sozlama oʻzgaradi, kod emas.</p>
+  <p style="position:absolute; left:128px; bottom:64px; font-family:'JetBrains Mono', Courier New, monospace; font-size:24px; color:#8A8175">Server 10.103.10.86 · Sangoma Linux 7 · Asterisk 20.4</p>
+  
+</section>
+<section id="arxitektura" style="background:#F7F5F1; color:#10202F; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:36px">
+  <div style="display:flex; align-items:baseline; gap:24px">
+    <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:26px; color:#B8730C; text-transform:uppercase; letter-spacing:2px">Mezon 1</p>
+    <h2 style="font-size:64px; font-weight:600; line-height:1.1">Texnik amalga oshirish</h2>
+  </div>
+  <div style="display:flex; align-items:center; gap:18px">
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:26px; display:flex; flex-direction:column; gap:10px"><h3 style="font-size:30px; font-weight:600">Abonent</h3><p style="font-size:26px; color:#4A5A6B">7000 raqami</p></div>
+    <div style="width:62px; color:#B8730C; font-size:54px; line-height:1; text-align:center">&#8594;</div>
+    <div style="flex:1.1; background:#FFFFFF; border:1px solid #DDD8CF; padding:26px; display:flex; flex-direction:column; gap:10px"><h3 style="font-size:30px; font-weight:600">Asterisk</h3><p style="font-size:26px; color:#4A5A6B">IVR, yozuv, navbat</p></div>
+    <div style="width:62px; color:#B8730C; font-size:54px; line-height:1; text-align:center">&#8594;</div>
+    <div style="flex:1.4; background:#10202F; padding:26px; display:flex; flex-direction:column; gap:10px"><h3 style="font-size:30px; font-weight:600; color:#F2EFE9">Koʻprik</h3><p style="font-size:26px; color:#C8D3DE">nutq chegarasi → tanish → qaror → sintez</p></div>
+    <div style="width:62px; color:#B8730C; font-size:54px; line-height:1; text-align:center">&#8594;</div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:26px; display:flex; flex-direction:column; gap:10px"><h3 style="font-size:30px; font-weight:600">Javob</h3><p style="font-size:26px; color:#4A5A6B">yoki operator</p></div>
+  </div>
+  <div style="display:flex; gap:24px">
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; border-top:4px solid #10202F; padding:30px; display:flex; flex-direction:column; gap:12px">
+      <h3 style="font-size:32px; font-weight:600">Ovoz kanali — AudioSocket</h3>
+      <p style="font-size:28px; color:#4A5A6B; line-height:1.4">PCM 8 kHz, har 20 ms bitta kadr. Asterisk 20 ga qurilgan, alohida media-server kerak emas.</p>
+    </div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; border-top:4px solid #10202F; padding:30px; display:flex; flex-direction:column; gap:12px">
+      <h3 style="font-size:32px; font-weight:600">Maʼlumot kanali — HTTP</h3>
+      <p style="font-size:28px; color:#4A5A6B; line-height:1.4">AudioSocket raqam ham, qarorni ham tashimaydi: ular dialplandan CURL orqali oʻtadi.</p>
+    </div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; border-top:4px solid #0E7C4A; padding:30px; display:flex; flex-direction:column; gap:12px">
+      <h3 style="font-size:32px; font-weight:600">Jonli oʻlchov</h3>
+      <p style="font-size:28px; color:#4A5A6B; line-height:1.4">Savol → javob <b>302 ms</b>. Boʻlib gapirishga javob ~0,5 s. 3 ta bir vaqtli qoʻngʻiroq, yuklama 0,00.</p>
+    </div>
+  </div>
+  <p style="position:absolute; left:128px; bottom:64px; font-size:26px; color:#8A8175">Har bir qoʻngʻiroq = bitta TCP ulanish; sekin ishlar alohida vazifalarda, shuning uchun kadr oqimi hech qachon toʻxtamaydi</p>
+  
+</section>
+<section id="ishonch" style="background:#10202F; color:#F2EFE9; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:40px">
+  <div style="display:flex; align-items:baseline; gap:24px">
+    <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:26px; color:#E3A648; text-transform:uppercase; letter-spacing:2px">Mezon 1 · ishonchlilik</p>
+    <h2 style="font-size:64px; font-weight:600; line-height:1.1; color:#F2EFE9">Abonent hech qachon sukutda qolmaydi</h2>
+  </div>
+  <div style="display:flex; gap:24px">
+    <div style="flex:1; background:#182C40; padding:32px; display:flex; flex-direction:column; gap:14px">
+      <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:44px; color:#E3A648">01</p>
+      <h3 style="font-size:32px; font-weight:600; color:#F2EFE9">Qaror avval yoziladi</h3>
+      <p style="font-size:27px; color:#C8D3DE; line-height:1.4">Dialplan uchun qaror yiqilishi mumkin boʻlgan hamma narsadan oldin yozib qoʻyiladi.</p>
+    </div>
+    <div style="flex:1; background:#182C40; padding:32px; display:flex; flex-direction:column; gap:14px">
+      <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:44px; color:#E3A648">02</p>
+      <h3 style="font-size:32px; font-weight:600; color:#F2EFE9">Nomaʼlum = operator</h3>
+      <p style="font-size:27px; color:#C8D3DE; line-height:1.4">Control API tanimagan qoʻngʻiroqqa ham <b>operator</b> deb javob beradi.</p>
+    </div>
+    <div style="flex:1; background:#182C40; padding:32px; display:flex; flex-direction:column; gap:14px">
+      <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:44px; color:#E3A648">03</p>
+      <h3 style="font-size:32px; font-weight:600; color:#F2EFE9">Dial(AudioSocket)</h3>
+      <p style="font-size:27px; color:#C8D3DE; line-height:1.4">Ilova emas, aynan Dial: koʻprik oʻlsa ham qoʻngʻiroq uzilmaydi.</p>
+    </div>
+  </div>
+  <div style="background:#F2EFE9; padding:34px; display:flex; flex-direction:column; gap:12px">
+    <h3 style="font-size:32px; font-weight:600; color:#10202F">Tekshirildi, taxmin qilinmadi</h3>
+    <p style="font-size:30px; color:#3C4A59; line-height:1.45">Suhbat oʻrtasida koʻprik xizmati toʻxtatildi — qoʻngʻiroq uzilmadi, operator navbatiga tushdi va tirik odam javob berdi. Model ishlamay qolganda, javob kechikkanda, soket uzilganda ham natija bitta: odamga uzatish.</p>
+  </div>
+  <p style="position:absolute; left:128px; bottom:64px; font-family:'JetBrains Mono', Courier New, monospace; font-size:24px; color:#8FA3B5">6 ta alohida test aynan shu savolga javob beradi: «abonent sukutda qola oladimi?»</p>
+  
+</section>
+<section id="kod" style="background:#F7F5F1; color:#10202F; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:40px">
+  <div style="display:flex; align-items:baseline; gap:24px">
+    <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:26px; color:#B8730C; text-transform:uppercase; letter-spacing:2px">Mezon 2</p>
+    <h2 style="font-size:64px; font-weight:600; line-height:1.1">Kod tayyorligi</h2>
+  </div>
+  <div style="display:flex; gap:20px">
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:28px; display:flex; flex-direction:column; gap:8px"><p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:64px; color:#10202F">113</p><p style="font-size:26px; color:#4A5A6B">avtomatik test</p></div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:28px; display:flex; flex-direction:column; gap:8px"><p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:64px; color:#10202F">84%</p><p style="font-size:26px; color:#4A5A6B">kod qamrovi</p></div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:28px; display:flex; flex-direction:column; gap:8px"><p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:64px; color:#0E7C4A">0</p><p style="font-size:26px; color:#4A5A6B">linter va tip xatosi</p></div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:28px; display:flex; flex-direction:column; gap:8px"><p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:64px; color:#10202F">2</p><p style="font-size:26px; color:#4A5A6B">mustaqil audit</p></div>
+  </div>
+  <div style="display:flex; gap:24px">
+    <div style="flex:1; display:flex; flex-direction:column; gap:14px">
+      <h3 style="font-size:34px; font-weight:600">Qanday ushlab turiladi</h3>
+      <ul style="font-size:29px; color:#3C4A59; line-height:1.5">
+        <li><b>make check</b> — linter, tiplar, testlar; yiqilsa, serverga chiqmaydi</li>
+        <li>Sinovlar telefonsiz: haqiqiy TCP orqali toʻliq qoʻngʻiroq oʻynatiladi</li>
+        <li>Har bir tuzatilgan xato uchun alohida test</li>
+        <li>Repozitoriyda birorta ham parol yoki kalit yoʻq</li>
+      </ul>
+    </div>
+    <div style="flex:1; display:flex; flex-direction:column; gap:14px">
+      <h3 style="font-size:34px; font-weight:600">Hajm</h3>
+      <table style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:28px; color:#10202F; border:1px solid #DDD8CF">
+        <tr style="background:#EFEBE4"><th style="width:60%; text-align:left; padding:10px 16px">Qism</th><th style="width:40%; text-align:left">Satr</th></tr>
+        <tr><td>Koʻprik</td><td>1663</td></tr>
+        <tr><td>CRM</td><td>2487</td></tr>
+        <tr><td>Maʼlumotlar qatlami</td><td>437</td></tr>
+        <tr><td>Testlar</td><td>1414</td></tr>
+      </table>
+    </div>
+  </div>
+  <p style="position:absolute; left:128px; bottom:64px; font-size:26px; color:#8A8175">Hujjatlar: arxitektura, tekshiruv qadamlari, ekspluatatsiya, audit hisobotlari, B uchun texnik topshiriq</p>
+  
+</section>
+<section id="audit" style="background:#F7F5F1; color:#10202F; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:36px">
+  <div style="display:flex; align-items:baseline; gap:24px">
+    <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:26px; color:#B8730C; text-transform:uppercase; letter-spacing:2px">Mezon 2 · sifat</p>
+    <h2 style="font-size:64px; font-weight:600; line-height:1.1">Ikki mustaqil audit va ularning natijasi</h2>
+  </div>
+  <div style="display:flex; gap:24px">
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; border-top:4px solid #B8730C; padding:32px; display:flex; flex-direction:column; gap:14px">
+      <h3 style="font-size:34px; font-weight:600">Koʻprik auditi — 12 ta topilma</h3>
+      <ul style="font-size:27px; color:#3C4A59; line-height:1.5">
+        <li>Kutilmagan xato qoʻngʻiroqni 6 daqiqa sukutda qoldirardi</li>
+        <li>Xatodan keyin resurslar tozalanmasdi</li>
+        <li>Boʻlib gapirishda fraza boshi yoʻqolardi</li>
+        <li>Sintezda hech qayerda muddat chegarasi yoʻq edi</li>
+      </ul>
+    </div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; border-top:4px solid #B8730C; padding:32px; display:flex; flex-direction:column; gap:14px">
+      <h3 style="font-size:34px; font-weight:600">CRM auditi — 16 ta topilma</h3>
+      <ul style="font-size:27px; color:#3C4A59; line-height:1.5">
+        <li>Kirishdan keyin begona saytga yoʻnaltirish mumkin edi</li>
+        <li>Kirish formasida soxta soʻrovdan himoya yoʻq edi</li>
+        <li>Bir soniyada ikki tahrir — bot eskisida qolardi</li>
+        <li>Boshqaruv paneli 20 000 qoʻngʻiroqda 896 ms</li>
+      </ul>
+    </div>
+  </div>
+  <div style="background:#10202F; padding:32px; display:flex; align-items:center; gap:40px">
+    <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:56px; color:#E3A648">28 / 28</p>
+    <p style="font-size:30px; color:#C8D3DE; line-height:1.45; width:1300px">Hammasi tuzatildi va har biri uchun test yozildi. SQL-inʼyeksiya, XSS va sessiyani soxtalashtirish topilmadi; yozuvlar katalogidan chiqib ketish ikki marta yopilgan.</p>
+  </div>
+  
+</section>
+<section id="bilim-baza" style="background:#10202F; color:#F2EFE9; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:36px">
+  <div style="display:flex; align-items:baseline; gap:24px">
+    <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:26px; color:#E3A648; text-transform:uppercase; letter-spacing:2px">Mezon 3 · asosiy yangilik</p>
+    <h2 style="font-size:60px; font-weight:600; line-height:1.1; color:#F2EFE9">Bilimlar bazasi yordamchining nutqini boshqaradi</h2>
+  </div>
+  <p style="font-size:34px; color:#C8D3DE; line-height:1.4; width:1600px">Nazoratchi CRM da javob matnini tahrirlaydi va «Chop etish» tugmasini bosadi — <b style="color:#F2EFE9">keyingi qoʻngʻiroqda abonent yangi matnni eshitadi</b>. Dasturchisiz, qayta ishga tushirishsiz, yangi versiyani chiqarishsiz.</p>
+  <div style="background:#182C40; border-left:6px solid #E3A648; padding:34px; display:flex; flex-direction:column; gap:16px">
+    <h3 style="font-size:30px; font-weight:600; color:#E3A648">Jonli tekshiruv, 18.09.2026</h3>
+    <table style="font-family:'JetBrains Mono', Courier New, monospace; font-size:28px; color:#C8D3DE">
+      <tr><td style="width:14%; color:#F2EFE9">14:36:37</td><td style="width:86%">koʻprik ishga tushdi — bundan keyin unga tegilmadi</td></tr>
+      <tr><td style="color:#F2EFE9">14:37</td><td>qoʻngʻiroq: «Stipendiya har oyning oʻninchi sanasida…»</td></tr>
+      <tr><td style="color:#E3A648">14:38</td><td style="color:#E3A648">CRM da javob tahrirlandi va chop etildi</td></tr>
+      <tr><td style="color:#F2EFE9">14:38</td><td>qoʻngʻiroq: «Stipendiya har oyning yigirmanchi sanasida…»</td></tr>
+    </table>
+  </div>
+  <div style="display:flex; gap:24px">
+    <div style="flex:1; background:#182C40; padding:28px; display:flex; flex-direction:column; gap:10px"><h3 style="font-size:28px; font-weight:600; color:#F2EFE9">Qoralama efirga chiqmaydi</h3><p style="font-size:26px; color:#A8BACB; line-height:1.4">Koʻprik faqat «chop etilgan» yozuvlarni oʻqiydi.</p></div>
+    <div style="flex:1; background:#182C40; padding:28px; display:flex; flex-direction:column; gap:10px"><h3 style="font-size:28px; font-weight:600; color:#F2EFE9">Har tahrir — yangi versiya</h3><p style="font-size:26px; color:#A8BACB; line-height:1.4">Kim, qachon va nimani oʻzgartirgani saqlanadi.</p></div>
+    <div style="flex:1; background:#182C40; padding:28px; display:flex; flex-direction:column; gap:10px"><h3 style="font-size:28px; font-weight:600; color:#F2EFE9">Har javobda manba</h3><p style="font-size:26px; color:#A8BACB; line-height:1.4">Hujjat va band raqami — masala №3 talabi.</p></div>
+  </div>
+  
+</section>
+<section id="suhbat" style="background:#F7F5F1; color:#10202F; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:34px">
+  <div style="display:flex; align-items:baseline; gap:24px">
+    <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:26px; color:#B8730C; text-transform:uppercase; letter-spacing:2px">Mezon 3 · suhbat</p>
+    <h2 style="font-size:62px; font-weight:600; line-height:1.1">Telefon suhbatining oʻziga xos yechimlari</h2>
+  </div>
+  <div style="display:flex; gap:22px">
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:30px; display:flex; flex-direction:column; gap:12px">
+      <h3 style="font-size:31px; font-weight:600">Modelsiz javob — 302 ms</h3>
+      <p style="font-size:27px; color:#4A5A6B; line-height:1.45">Koʻp beriladigan savolga kalit soʻz boʻyicha darhol javob beriladi: modelga murojaat yoʻq, bir soniya tejaladi.</p>
+    </div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:30px; display:flex; flex-direction:column; gap:12px">
+      <h3 style="font-size:31px; font-weight:600">Boʻlib gapirish</h3>
+      <p style="font-size:27px; color:#4A5A6B; line-height:1.45">Abonent gapira boshlasa, bot ~0,5 soniyada jim boʻladi. Boshlangan fraza yoʻqolmaydi: uning boshi tanishga qayta uzatiladi.</p>
+    </div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:30px; display:flex; flex-direction:column; gap:12px">
+      <h3 style="font-size:31px; font-weight:600">Model buyruq bermaydi</h3>
+      <p style="font-size:27px; color:#4A5A6B; line-height:1.45">Model faqat JSON qaytaradi. Nima boʻlishini qoidalar hal qiladi: model qonun toʻqiy olmaydi va oʻzi goʻshakni qoʻya olmaydi.</p>
+    </div>
+  </div>
+  <div style="display:flex; gap:22px">
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:30px; display:flex; flex-direction:column; gap:12px">
+      <h3 style="font-size:31px; font-weight:600">Frazani qachon tugagan deb bilamiz</h3>
+      <p style="font-size:27px; color:#4A5A6B; line-height:1.45">VoiceLab oraliq natija bermaydi, shuning uchun chegarani oʻzimiz topamiz: 20 ms kadr, gisterezis, 700 ms sukut va 300 ms «oldindan yozuv» — birinchi boʻgʻin kesilmasin.</p>
+    </div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:30px; display:flex; flex-direction:column; gap:12px">
+      <h3 style="font-size:31px; font-weight:600">Ovoz maʼlumoti mamlakatda qoladi</h3>
+      <p style="font-size:27px; color:#4A5A6B; line-height:1.45">Ovoz — biometrik maʼlumot. Telefoniya oʻz serverimizda, nutq va model — VoiceLab.uz. Chet el bulut xizmatlari ataylab ishlatilmaydi.</p>
+    </div>
+  </div>
+  <p style="position:absolute; left:128px; bottom:64px; font-size:26px; color:#8A8175">Suhbat matni va yozuv bir-biriga bogʻlangan: CRM da savolga bosilsa, yozuv aynan oʻsha joyga oʻtadi</p>
+  
+</section>
+<section id="jamoa" style="background:#F7F5F1; color:#10202F; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:36px">
+  <div style="display:flex; align-items:baseline; gap:24px">
+    <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:26px; color:#B8730C; text-transform:uppercase; letter-spacing:2px">Mezon 4</p>
+    <h2 style="font-size:64px; font-weight:600; line-height:1.1">Jamoaning bilim darajasi</h2>
+  </div>
+  <table style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:28px; color:#10202F; border:1px solid #DDD8CF">
+    <tr style="background:#10202F"><th style="width:26%; color:#F2EFE9; padding:12px 16px; text-align:left">Soha</th><th style="width:74%; color:#F2EFE9; text-align:left">Loyihada nimada koʻrinadi</th></tr>
+    <tr><td>Telefoniya</td><td>Asterisk dialplan, AudioSocket protokoli, PJSIP, navbatlar, MixMonitor, ARI</td></tr>
+    <tr style="background:#FFFFFF"><td>Ovoz bilan ishlash</td><td>Nutq chegarasini topish, 20 ms kadr ritmi, 8↔16↔24 kHz qayta hisoblash, filtr holatini saqlab oqim</td></tr>
+    <tr><td>Asinxron Python</td><td>Bir jarayonda koʻp qoʻngʻiroq, vazifalar, muddatlar, bekor qilish, resurslarni tozalash</td></tr>
+    <tr style="background:#FFFFFF"><td>Maʼlumotlar bazasi</td><td>SQLite WAL rejimida ikki jarayon, migratsiyalar, FTS5 boʻyicha matn qidiruvi, indekslar</td></tr>
+    <tr><td>Veb va xavfsizlik</td><td>FastAPI, server tomonda render, scrypt parollar, imzolangan sessiya, forma tokeni, rollar</td></tr>
+    <tr style="background:#FFFFFF"><td>Ekspluatatsiya</td><td>systemd, avtomatik chiqarish, zaxira nusxa, jurnal, eski serverdagi cheklovlar bilan ishlash</td></tr>
+  </table>
+  <div style="display:flex; gap:24px">
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:26px"><h3 style="font-size:30px; font-weight:600">A dasturchi</h3><p style="font-size:27px; color:#4A5A6B; line-height:1.4">Telefoniya, koʻprik, suhbat mantiqi, CRM, server</p></div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:26px"><h3 style="font-size:30px; font-weight:600">B dasturchi</h3><p style="font-size:27px; color:#4A5A6B; line-height:1.4">VoiceLab moduli: tanish, sintez, model — 14 vazifali topshiriq</p></div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:26px"><h3 style="font-size:30px; font-weight:600">Ishni ajratish</h3><p style="font-size:27px; color:#4A5A6B; line-height:1.4">Bitta shartnoma fayli — ikkalasi bir-birini kutmay ishlaydi</p></div>
+  </div>
+  
+</section>
+<section id="stack" style="background:#F7F5F1; color:#10202F; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:32px">
+  <div style="display:flex; align-items:baseline; gap:24px">
+    <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:26px; color:#B8730C; text-transform:uppercase; letter-spacing:2px">Mezon 5</p>
+    <h2 style="font-size:64px; font-weight:600; line-height:1.1">Texnologiyalar toʻplami va nima uchun aynan shu</h2>
+  </div>
+  <table style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:27px; color:#10202F; border:1px solid #DDD8CF">
+    <tr style="background:#10202F"><th style="width:30%; color:#F2EFE9; padding:12px 16px; text-align:left">Texnologiya</th><th style="width:70%; color:#F2EFE9; text-align:left">Tanlov sababi</th></tr>
+    <tr><td>Asterisk 20 · AudioSocket</td><td>Faqat ovoz kerak; protokol Asteriskning oʻzida, alohida media-server shart emas</td></tr>
+    <tr style="background:#FFFFFF"><td>webrtcvad</td><td>Serverdagi eski kutubxonalar bilan oʻrnatiladigan yagona VAD</td></tr>
+    <tr><td>numpy &lt; 2.3 · soxr &lt; 1</td><td>Sangoma Linux 7 uchun yangi versiyalarning tayyor paketi yoʻq</td></tr>
+    <tr style="background:#FFFFFF"><td>VoiceLab.uz</td><td>Oʻzbek nutqi va model; ovoz biometrik maʼlumot — mamlakatda qoladi</td></tr>
+    <tr><td>SQLite · WAL · FTS5</td><td>Bitta mashina, tranzaksiya kerak, suhbat matni boʻyicha qidiruv kerak</td></tr>
+    <tr style="background:#FFFFFF"><td>FastAPI · Jinja2</td><td>Oʻnlab forma va jadval; sahifani server yigʻadi — npm va yigʻish bosqichi yoʻq</td></tr>
+    <tr><td>Standart kutubxona kriptografiyasi</td><td>scrypt va hmac — Pythonning oʻzida; ortiqcha bogʻliqlik yoʻq</td></tr>
+    <tr style="background:#FFFFFF"><td>uv · ruff · mypy · pytest</td><td>Tez muhit, bitta buyruq bilan: linter, tiplar, testlar</td></tr>
+  </table>
+  <p style="position:absolute; left:128px; bottom:64px; font-size:27px; color:#4A5A6B; width:1600px">Bitta umumiy qoida: himoya kunida internet boʻlmasligi mumkin, shuning uchun hech narsa tashqi CDN yoki bulutga bogʻlanmagan</p>
+  
+</section>
+<section id="raqamlar" style="background:#10202F; color:#F2EFE9; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:32px">
+  <h2 style="font-size:62px; font-weight:600; line-height:1.1; color:#F2EFE9">Oʻlchangan raqamlar, taxmin emas</h2>
+  <div style="display:flex; gap:26px">
+    <div style="flex:1; display:flex; flex-direction:column; gap:14px">
+      <h3 style="font-size:30px; font-weight:600; color:#E3A648">Qoʻngʻiroq</h3>
+      <table style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:27px; color:#C8D3DE">
+        <tr><td style="width:64%">Savol tugashi aniqlanishi</td><td style="width:36%; color:#F2EFE9">700 ms</td></tr>
+        <tr><td>Kalit soʻz boʻyicha javob</td><td style="color:#F2EFE9">302 ms</td></tr>
+        <tr><td>Boʻlib gapirishga javob</td><td style="color:#F2EFE9">~0,5 s</td></tr>
+        <tr><td>Bir vaqtda 3 qoʻngʻiroq</td><td style="color:#F2EFE9">yuklama 0,00</td></tr>
+      </table>
+    </div>
+    <div style="flex:1; display:flex; flex-direction:column; gap:14px">
+      <h3 style="font-size:30px; font-weight:600; color:#E3A648">CRM · 20 000 qoʻngʻiroqda</h3>
+      <table style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:27px; color:#C8D3DE">
+        <tr><td style="width:64%">Boshqaruv paneli</td><td style="width:36%; color:#F2EFE9">896 ms → 17 ms</td></tr>
+        <tr><td>Qoʻngʻiroqlar roʻyxati</td><td style="color:#F2EFE9">88 ms → 6 ms</td></tr>
+        <tr><td>Filtr bilan</td><td style="color:#F2EFE9">432 ms → 10 ms</td></tr>
+        <tr><td>Serverda haqiqiy maʼlumotda</td><td style="color:#F2EFE9">3–8 ms</td></tr>
+      </table>
+    </div>
+  </div>
+  <div style="background:#182C40; padding:30px; display:flex; flex-direction:column; gap:12px">
+    <h3 style="font-size:30px; font-weight:600; color:#F2EFE9">Har bir qoʻngʻiroq oʻzini oʻzi oʻlchaydi</h3>
+    <p style="font-size:28px; color:#C8D3DE; line-height:1.45">Tanish, qaror va umumiy vaqt har bir savol uchun bazaga yoziladi va CRM da koʻrinadi. Shuning uchun taqdimotdagi raqamlar — bu baho emas, oʻlchov; ularni hozir ham tekshirsa boʻladi.</p>
+  </div>
+  <p style="position:absolute; left:128px; bottom:64px; font-family:'JetBrains Mono', Courier New, monospace; font-size:24px; color:#8FA3B5">20 000 qoʻngʻiroq · 40 000 replika · 3 000 murojaat — bu vazirlik bir oyda olganidan koʻproq</p>
+  
+</section>
+<section id="xavfsizlik" style="background:#F7F5F1; color:#10202F; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:34px">
+  <h2 style="font-size:62px; font-weight:600; line-height:1.1">Xavfsizlik va shaxsiy maʼlumotlar</h2>
+  <div style="display:flex; gap:22px">
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:28px; display:flex; flex-direction:column; gap:12px">
+      <h3 style="font-size:30px; font-weight:600">Kirish</h3>
+      <p style="font-size:26px; color:#4A5A6B; line-height:1.45">scrypt parollar, imzolangan sessiya, har formada token, parol terishga qarshi kechikish</p>
+    </div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:28px; display:flex; flex-direction:column; gap:12px">
+      <h3 style="font-size:30px; font-weight:600">Rollar</h3>
+      <p style="font-size:26px; color:#4A5A6B; line-height:1.45">Operator, nazoratchi, administrator. Tahlil va boshqaruv boʻlimlari yopiq — testlar bilan tasdiqlangan</p>
+    </div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:28px; display:flex; flex-direction:column; gap:12px">
+      <h3 style="font-size:30px; font-weight:600">Izlanuvchanlik</h3>
+      <p style="font-size:26px; color:#4A5A6B; line-height:1.45">Kim kirdi, kim murojaat ochdi, kim javobni chop etdi — hammasi amallar jurnalida</p>
+    </div>
+    <div style="flex:1; background:#FFFFFF; border:1px solid #DDD8CF; padding:28px; display:flex; flex-direction:column; gap:12px">
+      <h3 style="font-size:30px; font-weight:600">Sirlar</h3>
+      <p style="font-size:26px; color:#4A5A6B; line-height:1.45">Repozitoriyda birorta parol yoʻq; hammasi serverdagi himoyalangan faylda</p>
+    </div>
+  </div>
+  <div style="background:#EFEBE4; border-left:6px solid #B8730C; padding:30px; display:flex; flex-direction:column; gap:12px">
+    <h3 style="font-size:30px; font-weight:600">Ochiq aytamiz: nima qilinmagan</h3>
+    <p style="font-size:28px; color:#3C4A59; line-height:1.45">HTTPS yoʻq — kirish faqat ichki tarmoqdan, parol bilan. Yozuvlarni saqlash muddati belgilanmagan. Xodim istalgan qoʻngʻiroqni koʻra oladi — bu ataylab: operator qoʻngʻiroq qilgan odamga javob beradi, hisobdorlik esa amallar jurnali orqali taʼminlanadi.</p>
+  </div>
+  
+</section>
+<section id="keyingi" style="background:#10202F; color:#F2EFE9; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px; display:flex; flex-direction:column; justify-content:space-between">
+  <div style="display:flex; flex-direction:column; gap:30px">
+    <h2 style="font-size:62px; font-weight:600; line-height:1.1; color:#F2EFE9">Keyingi qadamlar</h2>
+    <div style="display:flex; gap:24px">
+      <div style="flex:1; background:#182C40; padding:30px; display:flex; flex-direction:column; gap:12px"><p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:26px; color:#E3A648">1</p><h3 style="font-size:30px; font-weight:600; color:#F2EFE9">VoiceLab ulash</h3><p style="font-size:26px; color:#A8BACB; line-height:1.4">Modul B dasturchida, 14 vazifali topshiriq tayyor. Ulanish — bitta sozlama.</p></div>
+      <div style="flex:1; background:#182C40; padding:30px; display:flex; flex-direction:column; gap:12px"><p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:26px; color:#E3A648">2</p><h3 style="font-size:30px; font-weight:600; color:#F2EFE9">Javoblarni lex.uz bilan sverka</h3><p style="font-size:26px; color:#A8BACB; line-height:1.4">Hujjat va band raqami har javobga yoziladi — endi bu CRM da qilinadi.</p></div>
+      <div style="flex:1; background:#182C40; padding:30px; display:flex; flex-direction:column; gap:12px"><p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:26px; color:#E3A648">3</p><h3 style="font-size:30px; font-weight:600; color:#F2EFE9">Jonli nutqda sozlash</h3><p style="font-size:26px; color:#A8BACB; line-height:1.4">Nutq chegarasi chegaralarini haqiqiy ovoz va shovqinda aniqlash.</p></div>
+    </div>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:18px">
+    <p style="font-size:40px; color:#F2EFE9; line-height:1.35; width:1500px">Kod ochiq, hujjatlar bilan: har bir daʼvoni hozir ham tekshirib koʻrsangiz boʻladi.</p>
+    <p style="font-family:'JetBrains Mono', Courier New, monospace; font-size:32px; color:#E3A648">github.com/dismoilov/eduvoice</p>
+  </div>
+  
+</section>
+</div></div>
+<div id="notes"></div>
+<div id="bar">
+  <button onclick="go(-1)">&#8592;</button>
+  <button onclick="go(1)">&#8594;</button>
+  <span id="count"></span>
+  <span id="title"></span>
+  <span style="flex:1"></span>
+  <button onclick="toggleNotes()">Izohlar (N)</button>
+  <button onclick="document.documentElement.requestFullscreen && document.documentElement.requestFullscreen()">To&#8216;liq ekran (F)</button>
+  <button onclick="window.print()">PDF (P)</button>
+</div>
+<script>
+const NOTES = ["Salom. Biz oʻzbek tilida gaplashadigan call-markaz operatorini va unga ulangan CRM ni qildik. Hamma narsa haqiqiy serverda ishlaydi, demo emas. Beshta texnik mezon boʻyicha ketma-ket javob beraman.", "Birinchi navbatda holatni ochiq aytaman: uchta qism toʻliq ishlaydi, nutq qismi hamkasbimda. Muhimi — zaxira modul maket emas: u bilan butun zanjir toʻliq sinaladi.", "Ovoz Asteriskdan koʻprikka AudioSocket orqali keladi — bu Asterisk 20 ning oʻz protokoli. Lekin u faqat ovozni tashiydi: raqam ham, yakuniy qaror ham HTTP orqali oʻtadi. Oʻlchangan raqam: kalit soʻz boʻyicha javob 302 millisekund.", "Bu bizning asosiy qoidamiz. Uchta qatlam: qaror avval yoziladi, nomaʼlum qoʻngʻiroq ham operatorga ketadi, dialplanda Dial ishlatiladi. Suhbat oʻrtasida xizmatni oʻchirib tekshirdik — qoʻngʻiroq operatorga tushdi.", "Kod tayyorligi — bu faqat «ishlayapti» degani emas. 113 test, qamrov 84 foiz, linter va tip tekshiruvi toza. Eng muhimi: serverga chiqishdan oldin testlar avtomatik ishga tushadi, qizil boʻlsa chiqmaydi.", "Kodni ikki marta mustaqil tekshiruvga berdik — maqsad maqtov emas, xato topish edi. 28 ta topilma, hammasi tuzatildi va testga olindi. Bu bizning eng kuchli tomonimiz: biz nafaqat yozdik, balki sindirib koʻrdik.", "Mana bu — bizning asosiy yangiligimiz. Odatda bot javoblari kodda yotadi va ularni dasturchi oʻzgartiradi. Bizda ular bazada: nazoratchi tahrirlaydi, chop etadi, keyingi qoʻngʻiroq allaqachon yangi matn bilan ketadi. Bu vaqtni soatlardan soniyalarga tushiradi.", "Telefon — bu veb-chat emas. Uchta muammoni yechdik: qachon odam gapirib boʻldi, qachon u bizni boʻldi, va model nimaga qodir emas. Va yana: ovoz biometrik maʼlumot, shuning uchun u mamlakatdan chiqmaydi.", "Loyiha bitta sohadan iborat emas: telefoniya, ovoz bilan ishlash, asinxron dasturlash, baza, veb-xavfsizlik va serverni saqlash. Ikkimiz bir-birimizni kutmaymiz, chunki oramizda aniq shartnoma fayli bor.", "Har bir texnologiya bir cheklovni yechadi. Eng muhimi: server eski, unda hamma narsa oʻrnatilmaydi — shuning uchun kutubxonalar aynan shunday tanlangan. Va hech narsa internetga bogʻlanmagan: himoya kunida u boʻlmasligi mumkin.", "Barcha raqamlar oʻlchangan. Tezlik boʻyicha alohida: CRM ni 20 mingta qoʻngʻiroqda sinab, sekin joylarni topdik va tuzatdik — boshqaruv paneli 896 millisekunddan 17 ga tushdi.", "Ovoz — biometrik maʼlumot, shuning uchun bu sahifa muhim. Bir narsani ataylab qoldirdik: xodim istalgan qoʻngʻiroqni koʻradi, chunki u kim qoʻngʻiroq qilgan boʻlsa, oʻshanga javob beradi. Nazorat taqiq bilan emas, jurnal bilan.", "Ochiq qoldirgan uch ishimiz bor va biz ularni yashirmaymiz. Kod ochiq, hujjatlar ichida tekshirish qadamlari bor — istasangiz, hozir ham qoʻngʻiroq qilib koʻrishimiz mumkin. Savollaringizni kutaman."];
+const slides = [...document.querySelectorAll("#canvas > section")];
+let index = 0;
+
+function fit() {
+  const room = window.innerHeight - 42;                     // pastdagi boshqaruv paneli
+  const scale = Math.min(window.innerWidth / 1920, room / 1080);
+  const left = (window.innerWidth - 1920 * scale) / 2;
+  const top = (room - 1080 * scale) / 2;
+  document.getElementById("canvas").style.transform =
+    "translate(" + left + "px, " + top + "px) scale(" + scale + ")";
+}
+function show(next) {
+  index = Math.max(0, Math.min(slides.length - 1, next));
+  slides.forEach((s, i) => s.classList.toggle("on", i === index));
+  document.getElementById("count").textContent = (index + 1) + " / " + slides.length;
+  document.getElementById("notes").textContent = NOTES[index] || "";
+  location.hash = index + 1;
+}
+function go(step) { show(index + step); }
+function toggleNotes() { document.getElementById("notes").classList.toggle("on"); }
+
+addEventListener("resize", fit);
+addEventListener("keydown", (e) => {
+  if (["ArrowRight", "PageDown", "Space", "Enter"].includes(e.code)) { e.preventDefault(); go(1); }
+  if (["ArrowLeft", "PageUp"].includes(e.code)) { e.preventDefault(); go(-1); }
+  if (e.code === "Home") show(0);
+  if (e.code === "End") show(slides.length - 1);
+  if (e.key === "n" || e.key === "N") toggleNotes();
+  if (e.key === "f" || e.key === "F") document.documentElement.requestFullscreen?.();
+  if (e.key === "p" || e.key === "P") window.print();
+});
+addEventListener("click", (e) => { if (!e.target.closest("#bar, #notes")) go(1); });
+fit();
+show(parseInt(location.hash.slice(1), 10) - 1 || 0);
+</script>
+</body>
+</html>
