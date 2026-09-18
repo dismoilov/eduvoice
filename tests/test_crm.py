@@ -715,3 +715,60 @@ def test_a_promised_callback_can_be_marked_as_kept(client, world):
     db.close()
     assert row["status"] == "done" and row["result"] == "Fuqaroga tushuntirildi."
     assert "2026-09-20 09:00" not in client.get("/").text, "a kept promise still shows as open"
+
+
+def test_the_language_switch_checks_its_token_instead_of_merely_carrying_one(client):
+    """The form has always sent a token and the handler ignored it, so another site could
+    switch an operator's interface to a language they do not read, mid-shift."""
+    sign_in(client)
+
+    forged = client.post("/prefs", data={"language": "ru", "back": "/", "csrf": "nonsense"})
+    assert 'lang="uz"' in client.get("/").text, "a forged request changed the language"
+
+    real = client.post("/prefs", data={"language": "ru", "back": "/calls", "csrf": token(client)})
+    assert real.headers["location"] == "/calls"
+    assert 'lang="ru"' in client.get("/").text
+
+    away = client.post(
+        "/prefs", data={"theme": "dark", "back": "//evil.example/", "csrf": token(client)}
+    )
+    assert away.headers["location"] == "/", "the switcher sent the operator to another host"
+    assert forged.status_code == 303
+
+
+def test_the_search_box_finds_what_it_says_it_finds(client, world):
+    """It offers "a question, a number or a ticket" and sent all three to the call
+    transcripts — so a ticket number, the most precise thing anyone can type, and the one
+    a citizen quotes back over the phone, was the one thing it could never find."""
+    from crm import repo
+
+    sign_in(client, "boss")
+    db = open_database(world)
+    ticket = repo.create_ticket(db, subject="Stipendiya", body="", author_id=1)
+    number = repo.ticket(db, ticket)["number"]
+    phone = repo.contacts(db, limit=1)[0]["phone"]
+    db.close()
+
+    assert client.get(f"/search?q={number}").headers["location"] == f"/tickets/{ticket}"
+    assert client.get(f"/search?q={phone}").headers["location"].startswith("/contacts/")
+    assert client.get("/search?q=stipendiya").headers["location"] == "/calls?q=stipendiya"
+    assert client.get("/search?q=2026-9999").headers["location"] == "/tickets?q=2026-9999"
+    assert client.get("/search?q=%20%20").headers["location"] == "/calls"
+
+
+def test_a_subject_is_a_line_not_an_essay(client):
+    """Transcribed questions and pasted notes arrive as one unbroken run of characters.
+
+    Stored whole, a 5000-character subject pushed the card past the edge of the screen and
+    took the column beside it with it; in the list it flattened every other row.
+    """
+    sign_in(client, "boss")
+
+    answer = client.post(
+        "/tickets/new",
+        data={"csrf": token(client), "subject": "x" * 5000, "body": "text"},
+    )
+
+    card = client.get(answer.headers["location"]).text
+    assert "x" * 5000 not in card
+    assert "x" * 200 in card, "the beginning of the subject should still be there"

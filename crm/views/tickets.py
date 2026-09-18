@@ -14,6 +14,9 @@ from crm.views.common import require_csrf
 
 router = APIRouter(prefix="/tickets")
 
+# A subject is a line that has to fit in a list, not the body of the request.
+SUBJECT_LIMIT = 200
+
 
 @router.get("")
 def ticket_list(
@@ -82,7 +85,8 @@ def ticket_create(
     db: sqlite3.Connection = Depends(get_db),
 ):
     require_csrf(request, csrf)
-    if not subject.strip():
+    subject = " ".join(subject.split())[:SUBJECT_LIMIT]
+    if not subject:
         return redirect("/tickets/new")
     contact_id = repo.ensure_contact(db, phone) if phone.strip() else None
     ticket_id = repo.create_ticket(
@@ -158,6 +162,10 @@ def ticket_update(
         fields["category"] = category
     if resolution:
         fields["resolution"] = resolution
+    if not fields:
+        # Nothing was changed, so nothing is recorded: an audit trail full of entries
+        # that say `{}` hides the ones that matter.
+        return redirect(f"/tickets/{ticket_id}")
     repo.update_ticket(db, ticket_id, int(user["id"]), **fields)
     repo.audit(
         db,

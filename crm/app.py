@@ -29,6 +29,7 @@ from crm.views import (
     dashboard,
     knowledge,
     media,
+    search,
     tickets,
 )
 from store.db import open_database
@@ -61,6 +62,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         admin,
         media,
         api,
+        search,
     ):
         application.include_router(module.router)
 

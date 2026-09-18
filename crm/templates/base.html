@@ -49,7 +49,7 @@
       <h1>{% block heading %}{% endblock %}</h1>
       {% block topbar %}{% endblock %}
       <div class="grow"></div>
-      <form class="search" action="/calls" method="get">
+      <form class="search" action="/search" method="get">
         <input type="search" name="q" value="{{ query.get('q', '') }}" placeholder="{{ t('search_hint') }}">
       </form>
       <form method="post" action="/prefs" class="seg sm">

@@ -108,6 +108,9 @@ def update_user(
     if password:
         fields["password_hash"] = hash_password(password)
     repo.update_user(db, user_id, **fields)
+    changed = sorted(key for key in fields if key != "password_hash")
+    if "password_hash" in fields:
+        changed.append("password")
     repo.audit(
         db,
         user_id=int(user["id"]),
@@ -115,5 +118,7 @@ def update_user(
         action="user_update",
         entity="user",
         entity_id=str(user_id),
+        # Which fields, so that "who changed this account, and what" is answerable.
+        detail=", ".join(changed),
     )
     return redirect("/admin")

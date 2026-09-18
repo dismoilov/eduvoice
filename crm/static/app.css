@@ -250,6 +250,14 @@ a { color: inherit; }
 
 /* =========================================================== cards ======== */
 .card { background: var(--surface); border: 1px solid var(--line); }
+/* A question comes off a telephone line and a note is pasted in by hand, so text here
+   can arrive as one unbroken run of five thousand characters. Without this it does not
+   wrap: it pushes the card past the edge of the screen and takes the column beside it
+   with it. */
+.card > header h2, .card .body, .facts dd, table.grid td, .bars .row { overflow-wrap: anywhere; }
+/* In a list a long subject must take one line and stop, or one row swallows the screen. */
+table.grid td .row-link { display: block; max-width: 60ch; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
 .card > header {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2);

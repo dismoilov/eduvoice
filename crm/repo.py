@@ -297,6 +297,11 @@ def ticket(db: sqlite3.Connection, ticket_id: int) -> dict[str, Any] | None:
     return one(db.execute(f"SELECT {TICKET_COLUMNS} {TICKET_JOINS} WHERE t.id = ?", (ticket_id,)))
 
 
+def ticket_by_number(db: sqlite3.Connection, number: str) -> dict[str, Any] | None:
+    """The number a citizen is told over the phone, which is what they quote back."""
+    return one(db.execute(f"SELECT {TICKET_COLUMNS} {TICKET_JOINS} WHERE t.number = ?", (number,)))
+
+
 def next_ticket_number(db: sqlite3.Connection) -> str:
     """Continues from the largest number of the year, so deleting one never collides."""
     year = datetime.now().year

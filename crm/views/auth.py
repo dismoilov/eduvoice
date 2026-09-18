@@ -76,10 +76,21 @@ def logout(request: Request, csrf: str = Form("")):
 
 @router.post("/prefs")
 def preferences(
-    request: Request, language: str = Form(""), theme: str = Form(""), back: str = Form("/")
+    request: Request,
+    language: str = Form(""),
+    theme: str = Form(""),
+    back: str = Form("/"),
+    csrf: str = Form(""),
 ):
-    """Language and theme live in cookies: no account needed, no page state to keep."""
-    response = redirect(back if back.startswith("/") else "/")
+    """Language and theme live in cookies: no account needed, no page state to keep.
+
+    The token is checked, not merely carried. The form has always sent one and the
+    handler ignored it, so another site could have switched an operator's interface to a
+    language they do not read in the middle of a shift.
+    """
+    if not csrf_ok(request.app.state.session_secret, request.cookies.get(SESSION_COOKIE), csrf):
+        return redirect("/")
+    response = redirect(safe_path(back))
     if language in LANGUAGES:
         response.set_cookie(LANG_COOKIE, language, max_age=365 * 24 * 3600, samesite="lax")
     if theme in ("light", "dark"):
