@@ -232,7 +232,9 @@ asterisk -rx "channel originate Local/998901234567@eduvoice-demo/n extension qhe
 | `README.md` | обзор проекта |
 | `docs/ARCHITECTURE.md` | как устроено и почему |
 | `docs/CRM.md` | экраны CRM, роли, связка базы знаний с речью ассистента |
+| `docs/REQUIREMENTS.md` | требования задания и доказательство каждого — для проверяющего |
 | `docs/CHECKS.md` | проверка всей системы за 10 минут, с ожидаемым выводом |
+| `docs/DATA.md` | данные о гражданине: что хранится, кто видит, чем защищено |
 | `docs/OPERATIONS.md` | сервер, деплой, диагностика, приватность |
 | `docs/AUDIT.md` | независимый аудит кода и что исправлено |
 | `docs/VOICELAB-TASKS.md` | разбор API VoiceLab: обещанное документацией против фактического |

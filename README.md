@@ -140,7 +140,9 @@ make voice-prewarm ARGS=--dry-run                # что осталось оз�
 
 | Документ | О чём |
 |---|---|
+| [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | **Требования задания и чем каждое подтверждено** — начните отсюда |
 | [docs/CHECKS.md](docs/CHECKS.md) | **Как проверить систему за 10 минут** — команда и что должно получиться |
+| [docs/DATA.md](docs/DATA.md) | Что система хранит о гражданине, кто это видит, как защищено |
 | [docs/CRM.md](docs/CRM.md) | CRM: экраны, роли, как база знаний управляет ответами помощника |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Как устроено и почему именно так |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Сервер, деплой, диагностика, безопасность и приватность |
