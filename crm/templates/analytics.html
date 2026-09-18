@@ -7,7 +7,7 @@
       <a class="{{ 'is-active' if days == value else '' }}" href="/analytics?days={{ value }}">{{ value }}</a>
     {% endfor %}
   </div>
-  <a class="btn sm" href="/analytics/export.csv">CSV</a>
+  <a class="btn sm" href="/analytics/export.csv?days={{ days }}">CSV</a>
 {% endblock %}
 {% block content %}
 <div class="stack">
@@ -17,7 +17,7 @@
       <div class="label">{{ t('an_calls') }} · {{ days }} {{ t('an_period')|lower }}</div>
     </div>
     <div class="tile">
-      <div class="value num">{{ ((data.totals.bot + data.totals.dropped) / data.totals.calls * 100)|round|int if data.totals.calls else 0 }}<small>%</small></div>
+      <div class="value num">{{ (data.totals.bot / data.totals.calls * 100)|round|int if data.totals.calls else 0 }}<small>%</small></div>
       <div class="label">{{ t('dash_no_operator') }}</div>
     </div>
     <div class="tile">
@@ -75,7 +75,7 @@
       <table class="grid">
         <tbody>
           {% for row in data.questions %}
-          <tr><td>{{ row.question }}</td><td class="tight right num muted">{{ row.count }}</td></tr>
+          <tr><td>{{ row.question }}</td><td class="tight right num muted">{{ row.count }}{% if row.people and row.people != row.count %} <span class="muted">/ {{ row.people }}</span>{% endif %}</td></tr>
           {% else %}<tr><td class="empty">{{ t('empty') }}</td></tr>{% endfor %}
         </tbody>
       </table>

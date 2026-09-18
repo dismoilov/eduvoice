@@ -22,7 +22,25 @@ OUTCOME_OPERATOR = "operator"  # handed over to a person
 OUTCOME_DROPPED = "dropped"  # the call ended with nothing delivered
 
 
-def outcome_of(next_action: str, ended_reason: str, answered: int = 0) -> str:
+# A turn delivered an answer only under these actions. "transfer", "goodbye" and
+# "clarify" also produce a turn with text in it — the service phrase the caller heard —
+# so counting any turn, or any turn with a measured latency, would score "I did not
+# understand you" as a question answered.
+ANSWERING_ACTIONS = frozenset({"faq", "answer"})
+# Why the call left the assistant for a person.
+HANDED_OVER = frozenset({"transfer", "tech_problem"})
+
+
+def delivered_answers(turns: list[dict]) -> int:
+    """How many questions in this call actually got an answer."""
+    return sum(
+        1
+        for turn in turns
+        if str(turn.get("action", "")) in ANSWERING_ACTIONS and str(turn.get("answer", "")).strip()
+    )
+
+
+def outcome_of(next_action: str, ended_reason: str, delivered: int = 0) -> str:
     """One word for how a call ended — the first thing a supervisor looks at.
 
     Someone who hears their answer and hangs up has been served, so the assistant gets
@@ -31,14 +49,15 @@ def outcome_of(next_action: str, ended_reason: str, answered: int = 0) -> str:
     gave up during the greeting as a success — the two mistakes that matter most here,
     because this is the number a supervisor reads first.
 
-    `next_action` cannot decide it: it stays "operator" for most of a call on purpose, so
-    that a bridge that dies mid-sentence sends the caller to a person rather than nowhere.
+    `next_action` cannot decide it on its own: it stays "operator" for most of a call on
+    purpose, so that a bridge dying mid-sentence sends the caller to a person rather than
+    nowhere.
     """
-    if ended_reason == "caller_hangup":
-        return OUTCOME_BOT if answered else OUTCOME_DROPPED
-    if next_action == "hangup":
-        return OUTCOME_BOT
-    return OUTCOME_OPERATOR
+    if ended_reason in HANDED_OVER or (
+        next_action == "operator" and ended_reason != "caller_hangup"
+    ):
+        return OUTCOME_OPERATOR
+    return OUTCOME_BOT if delivered > 0 else OUTCOME_DROPPED
 
 
 def _float(value: Any) -> float:
@@ -67,8 +86,8 @@ def upsert_contact(connection: sqlite3.Connection, phone: str) -> int | None:
 def save_call(connection: sqlite3.Connection, entry: dict[str, Any]) -> int:
     """Stores one finished call with its turns. Re-saving the same call replaces it."""
     turns = entry.get("turns") or []
-    answered = [_float((t.get("latency_ms") or {}).get("total_ms")) for t in turns]
-    answered = [value for value in answered if value]
+    measured = [_float((t.get("latency_ms") or {}).get("total_ms")) for t in turns]
+    measured = [value for value in measured if value]
     with transaction(connection):
         contact_id = upsert_contact(connection, entry.get("caller", ""))
         connection.execute("DELETE FROM calls WHERE call_id = ?", (entry["call_id"],))
@@ -87,13 +106,15 @@ def save_call(connection: sqlite3.Connection, entry: dict[str, Any]) -> int:
                 entry.get("started_at") or now(),
                 _float(entry.get("duration_s")),
                 outcome_of(
-                    entry.get("next_action", ""), entry.get("ended_reason", ""), len(answered)
+                    entry.get("next_action", ""),
+                    entry.get("ended_reason", ""),
+                    delivered_answers(turns),
                 ),
                 entry.get("ended_reason", ""),
                 entry.get("next_action", ""),
                 entry.get("recording", ""),
                 len(turns),
-                round(sum(answered) / len(answered), 1) if answered else 0.0,
+                round(sum(measured) / len(measured), 1) if measured else 0.0,
             ),
         )
         call_row_id = int(cursor.lastrowid or 0)

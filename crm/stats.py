@@ -7,10 +7,20 @@ hackathon stage they are the difference between a claim and a measurement.
 
 from __future__ import annotations
 
+import math
 import sqlite3
 import statistics
 from datetime import date, timedelta
 from typing import Any
+
+
+def _rank(count: int, share: float) -> int:
+    """Nearest-rank index for a percentile.
+
+    `int(n * 0.9)` reads one value too high and, for ten answers or fewer, simply returns
+    the slowest one — so on a quiet day the tile labelled p90 was the maximum.
+    """
+    return max(0, min(count - 1, math.ceil(count * share) - 1))
 
 
 def _scalar(db: sqlite3.Connection, sql: str, params: tuple = ()) -> float:
@@ -52,6 +62,16 @@ def dashboard(db: sqlite3.Connection, user_id: int) -> dict[str, Any]:
         """,
         (user_id,),
     ).fetchone()
+    # The typical answer, not the mean: one turn where a provider crawled used to drag
+    # this tile to twelve seconds on a day when four answers out of five were under one.
+    today_ms = sorted(
+        float(row[0])
+        for row in db.execute(
+            "SELECT t.total_ms FROM turns t JOIN calls c ON c.id = t.call_id"
+            " WHERE substr(c.started_at,1,10) = ? AND t.total_ms > 0",
+            (day,),
+        )
+    )
     total = int(calls["total"] or 0)
     return {
         "calls_today": total,
@@ -59,7 +79,8 @@ def dashboard(db: sqlite3.Connection, user_id: int) -> dict[str, Any]:
         "without_operator_percent": (
             round(100 * int(calls["without_operator"] or 0) / total) if total else 0
         ),
-        "avg_answer_ms": round(answers["avg_ms"] or 0),
+        "avg_answer_ms": round(statistics.median(today_ms)) if today_ms else 0,
+        "slowest_answer_ms": round(today_ms[-1]) if today_ms else 0,
         "open_tickets": int(tickets["open"] or 0),
         "overdue_tickets": int(tickets["overdue"] or 0),
         "my_open_tickets": int(tickets["mine"] or 0),
@@ -174,7 +195,7 @@ def analytics(db: sqlite3.Connection, days: int = 14) -> dict[str, Any]:
         "latency": {
             "average": round(statistics.fmean(ordered)) if ordered else 0,
             "median": round(statistics.median(ordered)) if ordered else 0,
-            "p90": round(ordered[int(len(ordered) * 0.9)]) if ordered else 0,
+            "p90": round(ordered[_rank(len(ordered), 0.9)]) if ordered else 0,
             "answers": len(ordered),
         },
         "topics": [
@@ -183,7 +204,9 @@ def analytics(db: sqlite3.Connection, days: int = 14) -> dict[str, Any]:
                 """
                 SELECT CASE WHEN t.faq_id != '' THEN t.faq_id ELSE t.intent END AS topic,
                        count(*) AS count,
-                       round(avg(t.total_ms)) AS avg_ms
+                       count(DISTINCT c.contact_id) AS people,
+                       t.faq_id != '' AS answered,
+                       round(avg(nullif(t.total_ms, 0))) AS avg_ms
                 FROM turns t JOIN calls c ON c.id = t.call_id
                 WHERE substr(c.started_at,1,10) >= ? AND t.question != ''
                 GROUP BY topic ORDER BY count DESC LIMIT 10
@@ -195,7 +218,8 @@ def analytics(db: sqlite3.Connection, days: int = 14) -> dict[str, Any]:
             dict(row)
             for row in db.execute(
                 """
-                SELECT max(t.question) AS question, count(*) AS count
+                SELECT max(t.question) AS question, count(*) AS count,
+                       count(DISTINCT c.contact_id) AS people
                 FROM turns t JOIN calls c ON c.id = t.call_id
                 WHERE substr(c.started_at,1,10) >= ? AND t.question != ''
                 GROUP BY lower(t.question) ORDER BY count DESC LIMIT 10
@@ -207,16 +231,21 @@ def analytics(db: sqlite3.Connection, days: int = 14) -> dict[str, Any]:
             dict(row)
             for row in db.execute(
                 """
+                -- Open tickets are counted whenever they were created: a backlog from
+                -- last month is precisely the load this table exists to show, and
+                -- limiting it to the period made the busiest operator look idle while
+                -- the tile above said otherwise. "Resolved" stays inside the period,
+                -- because that is work done in it.
                 SELECT u.name,
                        count(t.id) FILTER (WHERE t.status IN ('new','in_progress','waiting'))
                            AS open,
-                       count(t.id) FILTER (WHERE t.status IN ('resolved','closed')) AS done,
+                       count(t.id) FILTER (WHERE t.status IN ('resolved','closed')
+                                             AND substr(t.updated_at, 1, 10) >= ?) AS done,
                        count(t.id) AS total
                 FROM users u
-                LEFT JOIN tickets t
-                       ON t.assignee_id = u.id AND substr(t.created_at, 1, 10) >= ?
-                WHERE u.active = 1
-                GROUP BY u.id ORDER BY total DESC
+                LEFT JOIN tickets t ON t.assignee_id = u.id
+                WHERE u.active = 1 AND u.role IN ('operator', 'supervisor')
+                GROUP BY u.id ORDER BY open DESC, done DESC
                 """,
                 (since,),
             )

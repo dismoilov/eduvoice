@@ -474,8 +474,11 @@ def test_an_overdue_request_is_marked_as_such(client, world):
 def test_the_sql_helper_reads_but_refuses_to_write(tmp_path, monkeypatch, capsys):
     """The server's own sqlite3 is from 2013 and calls this database malformed.
 
-    So the project carries its own way in. It is meant for looking, not for changing:
-    a stray DELETE typed into a terminal at a demo must not reach the data.
+    So the project carries its own way in. It is meant for looking, not for changing, and
+    the guard is the connection rather than the wording of the query: SQLite runs
+    `WITH … DELETE` quite happily, and one `PRAGMA user_version = 0` leaves a file that
+    nothing can open again — including the bridge, which would then stop recording calls
+    without saying so.
     """
     from crm import cli
     from crm.config import settings as crm_settings
@@ -489,5 +492,14 @@ def test_the_sql_helper_reads_but_refuses_to_write(tmp_path, monkeypatch, capsys
     assert cli.main(["sql", "SELECT login FROM users"]) == 0
     assert "boss" in capsys.readouterr().out
 
-    assert cli.main(["sql", "DELETE FROM users"]) == 1, "a write must be refused"
-    assert open_database(database).execute("SELECT count(*) FROM users").fetchone()[0] == 1
+    for attack in (
+        "DELETE FROM users",
+        "WITH x AS (SELECT 1) DELETE FROM users",
+        "WITH x AS (SELECT 1) UPDATE knowledge SET answer = 'soxta', status = 'published'",
+        "PRAGMA user_version = 0",
+    ):
+        assert cli.main(["sql", attack]) == 1, f"{attack!r} was not refused"
+
+    survivor = open_database(database)
+    assert survivor.execute("SELECT count(*) FROM users").fetchone()[0] == 1
+    assert survivor.execute("PRAGMA user_version").fetchone()[0] > 0, "the schema was wiped"

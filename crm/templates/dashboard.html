@@ -19,6 +19,9 @@
     </div>
     <div class="tile">
       <div class="value num" data-figure="avg_answer_ms" data-format="ms">{{ ui.ms(figures.avg_answer_ms) }}</div>
+      {% if figures.slowest_answer_ms and figures.slowest_answer_ms > figures.avg_answer_ms %}
+      <div class="muted tight">{{ t('dash_slowest') }}: {{ ui.ms(figures.slowest_answer_ms) }}</div>
+      {% endif %}
       <div class="label">{{ t('dash_avg') }}</div>
     </div>
     <a class="tile" href="/tickets?status=open">

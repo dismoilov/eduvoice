@@ -9,7 +9,7 @@
 | Мост | `/opt/eduvoice/app`, пользователь `eduvoice`, сервис `eduvoice-bridge` |
 | CRM | тот же каталог, сервис `eduvoice-crm` |
 | Порты моста | `127.0.0.1:9092` (звук), `127.0.0.1:9093` (control API) — только локально |
-| Панель контроля | `9094`, логин `eduvoice`, пароль в `/root/eduvoice-credentials.txt` и в `.env` |
+| CRM | `9095` по сети, вход по логину и паролю из `/root/eduvoice-credentials.txt` |
 | Записи разговоров | `/var/spool/asterisk/monitor/eduvoice/<дата>/<uuid>.wav` |
 | Журнал звонков | `/opt/eduvoice/app/logs/<дата>.jsonl` |
 | Секреты | `/root/eduvoice-credentials.txt` (права `600`), `.env` (права `600`) |
@@ -31,7 +31,12 @@ make deploy-dialplan   # диалплан и глобальные перемен
 
 - `/etc/asterisk/extensions_custom.conf` ← `asterisk/extensions_custom.conf`
 - `/etc/asterisk/globals_custom.conf` ← `asterisk/globals_custom.conf`
+- `/etc/asterisk/queues_custom.conf` ← `asterisk/queues_custom.conf`
 - `/etc/systemd/system/eduvoice-bridge.service` ← `deploy/eduvoice-bridge.service`
+- `/etc/systemd/system/eduvoice-crm.service` ← `deploy/eduvoice-crm.service`
+
+Проверить, что сервер не разошёлся с репозиторием, можно построчным сравнением — на
+18.09.2026 все пять файлов совпадали байт в байт.
 
 ## Повседневные команды
 
@@ -102,7 +107,7 @@ make voice-prewarm ARGS=--dry-run
 | `CRM_SLA_HOURS` | 24 | срок, после которого обращение считается просроченным |
 | `EDUVOICE_DB` | `data/eduvoice.db` | файл базы |
 | `ARI_USER` / `ARI_PASSWORD` | — | нужны для кнопки «Позвонить» в карточке гражданина |
-| `RECORDINGS_DIR` | `/var/spool/asterisk/monitor` | откуда панель берёт записи |
+| `RECORDINGS_DIR` | `/var/spool/asterisk/monitor` | откуда CRM берёт записи |
 
 После изменения `.env` нужен `make restart`.
 

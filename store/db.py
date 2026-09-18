@@ -225,6 +225,21 @@ MIGRATIONS: list[str] = [
     UPDATE calls SET outcome = 'bot'
      WHERE outcome = 'dropped' AND ended_reason = 'caller_hangup' AND questions > 0;
     """,
+    # 5 — migration 4 counted any turn as an answer, which is wrong: a turn is also
+    #     written when the assistant says "I did not understand" or "I am transferring
+    #     you". Recomputed here from what each turn actually did, by the same rule the
+    #     bridge now uses, so a call means the same thing whichever path recorded it.
+    """
+    UPDATE calls SET outcome = CASE
+        WHEN ended_reason IN ('transfer', 'tech_problem') THEN 'operator'
+        WHEN next_action = 'operator' AND ended_reason != 'caller_hangup' THEN 'operator'
+        WHEN (SELECT count(*) FROM turns t
+               WHERE t.call_id = calls.id
+                 AND t.action IN ('faq', 'answer')
+                 AND trim(t.answer) != '') > 0 THEN 'bot'
+        ELSE 'dropped' END;
+    CREATE INDEX turns_faq ON turns(faq_id);
+    """,
 ]
 
 _local = threading.local()

@@ -45,7 +45,10 @@ async def test_prewarm_prepares_every_phrase(tmp_path):
     ready = await prompts.prewarm(FakeTextToSpeech(first_chunk_ms=1, ms_per_char=1))
 
     assert ready == len(TEXTS)
-    assert sorted(p.name for p in tmp_path.glob("*.pcm")) == ["goodbye.pcm", "greeting.pcm"]
+    # The name carries a fingerprint of the text, so an edited phrase cannot be served
+    # from a stale file — see the test at the bottom of this file.
+    names = sorted(p.name.split("-")[0] for p in tmp_path.glob("*.pcm"))
+    assert names == ["goodbye", "greeting"]
 
 
 async def test_a_broken_provider_does_not_stop_the_service_from_starting(tmp_path):
@@ -55,3 +58,25 @@ async def test_a_broken_provider_does_not_stop_the_service_from_starting(tmp_pat
             yield b""  # pragma: no cover — makes this an async generator
 
     assert await PromptLibrary(TEXTS, tmp_path).prewarm(BrokenTts()) == 0
+
+
+async def test_editing_a_phrase_changes_what_the_caller_hears(tmp_path):
+    """A cache keyed by phrase id alone would keep playing the old wording forever.
+
+    That is worse than it sounds: the supervisor edits the text, the CRM then shows the
+    new wording beside a recording of the old one, and `make deploy` deliberately keeps
+    the audio directory — so nothing short of deleting files by hand would ever fix it.
+    """
+    from eduvoice.fakes import FakeTextToSpeech
+    from eduvoice.prompts import PromptLibrary
+
+    tts = FakeTextToSpeech(first_chunk_ms=1, ms_per_char=1)
+    before = await PromptLibrary({"greeting": "eski salom"}, tmp_path).audio("greeting", tts)
+
+    await PromptLibrary({"greeting": "yangi salom"}, tmp_path).audio("greeting", tts)
+
+    assert tts.spoken == ["eski salom", "yangi salom"], "the edit was served from the old file"
+    # Both files stay: this is paid-for audio, and going back to the old wording is free.
+    assert len(list(tmp_path.glob("*.pcm"))) == 2
+    again = await PromptLibrary({"greeting": "eski salom"}, tmp_path).audio("greeting", tts)
+    assert again == before and len(tts.spoken) == 2, "reverting must not cost another synthesis"

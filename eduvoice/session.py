@@ -60,6 +60,13 @@ State = Literal["greeting", "listening", "thinking", "speaking", "closing"]
 # How long the closing phrase may take to reach the caller before we give up and let
 # the dialplan take over. Generous, because this is the last thing the caller hears.
 CLOSING_DRAIN_TIMEOUT_S = 15.0
+# How many utterances in a row may come back unrecognised before a person takes over.
+# Without a limit the call loops: the detector fires on noise, recognition hears nothing,
+# the assistant asks again — six minutes of that, and every lap is a paid recognition.
+MAX_UNHEARD = 3
+# Characters of text the synthesiser is assumed to render per second, on top of the flat
+# first-chunk allowance. Measured at ~150/s on the live service; 100 leaves a margin.
+CHARS_PER_SECOND_OF_BUDGET = 100.0
 
 
 class CallSession:
@@ -107,6 +114,7 @@ class CallSession:
         self._last_answer = ""
         self._turn_index = 0
         self._reprompts = 0
+        self._unheard = 0
         self._finishing = False
         self._cleaned_up = False
         self._started = time.monotonic()
@@ -265,15 +273,28 @@ class CallSession:
             if self._state in ("greeting", "speaking"):
                 self._listen()
 
+    def _first_chunk_budget(self, text: str) -> float:
+        """How long to wait for the first sound, allowing for how much there is to say.
+
+        The provider does not stream: it renders the whole phrase and sends it at once,
+        so the first chunk cannot arrive sooner than the last. Measured against the live
+        service on 18.09: 23 characters in 0.73 s, 75 in 0.86 s, 214 in 1.40 s. A flat
+        three-second deadline therefore fits a short reply comfortably and cuts off a long
+        one — and a synthesis cut off this way is billed, uncached, and ends with the
+        caller handed to an operator.
+        """
+        return self._cfg.tts_first_chunk_timeout_s + len(text) / CHARS_PER_SECOND_OF_BUDGET
+
     async def _stream_answer(self, text: str) -> None:
         """Streams synthesised speech, 24 kHz -> 8 kHz, with a deadline on the first chunk."""
         converter = StreamResampler(SAMPLE_RATE_TTS, SAMPLE_RATE_TELEPHONY)
         chunks = self._tts.stream(text, "uz").__aiter__()
+        first_budget = self._first_chunk_budget(text)
         first = True
         try:
             while True:
                 try:
-                    timeout = self._cfg.tts_first_chunk_timeout_s if first else self._cfg.max_call_s
+                    timeout = first_budget if first else self._cfg.max_call_s
                     chunk = await asyncio.wait_for(chunks.__anext__(), timeout=timeout)
                 except StopAsyncIteration:
                     break
@@ -338,8 +359,18 @@ class CallSession:
             self._cancel_filler()
 
         if decision is None:  # nothing was recognised
+            self._unheard += 1
+            if self._unheard >= MAX_UNHEARD:
+                log.info(
+                    "call %s: %d utterances in a row could not be recognised -> operator",
+                    self.call_id,
+                    self._unheard,
+                )
+                await self._finish("operator", "transfer")
+                return
             self._speak_prompt("repeat_please")
             return
+        self._unheard = 0
 
         try:
             await self._act(decision)

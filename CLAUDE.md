@@ -18,8 +18,8 @@ Claude Code читает его автоматически; другому ас�
 Человек звонит → узбекское IVR → ассистент слушает, распознаёт, отвечает по регламенту
 или переводит на живого оператора → разговор, расшифровка и решение попадают в CRM.
 
-Команда: **человек A** (пользователь) — телефония, мост, диалог, CRM. **Человек B** —
-модуль VoiceLab (речь и модель), задание в `docs/VOICELAB-TASKS.md`.
+Проект делает один человек. Модуль VoiceLab первоначально планировался на второго
+программиста, но тот выбыл, и речь подключили сами 18.09.
 
 ## 2. Состояние на сегодня
 
@@ -35,7 +35,7 @@ Claude Code читает его автоматически; другому ас�
 | Кредиты VoiceLab | ⚠️ закончились: синтез отдаёт 402, распознавание продолжает работать |
 | Коммиты в git | ✅ история есть, репозиторий публичный: `dismoilov/eduvoice` |
 
-129 тестов, `ruff` + `mypy` чисто. Скорость страниц — в [docs/AUDIT.md](docs/AUDIT.md).
+130 тестов, `ruff` + `mypy` чисто. Скорость страниц — в [docs/AUDIT.md](docs/AUDIT.md).
 
 ## 3. Как всё устроено
 
@@ -75,7 +75,7 @@ eduvoice/          мост (один звонок = одно TCP-соедине
   registry.py      состояние звонков в памяти, DEFAULT_NEXT = "operator"
   calllog.py       резервный JSON-журнал (logs/*.jsonl)
   config.py        все настройки из .env
-  interfaces.py    КОНТРАКТ с человеком B (SpeechToText / TextToSpeech / ChatModel)
+  interfaces.py    контракт провайдеров (SpeechToText / TextToSpeech / ChatModel)
   fakes.py         заглушки провайдеров
   voicelab.py      настоящие речь и модель (VoiceLab.uz); переключатель EDUVOICE_PROVIDER
   voice_tools.py   озвучить фразу, собрать IVR, разово наполнить кэш (prewarm)
@@ -87,10 +87,10 @@ crm/               рабочее место call-центра
   app.py repo.py stats.py security.py deps.py i18n.py telephony.py cli.py
   views/           экраны, templates/ страницы, static/ стиль и плеер
 asterisk/          диалплан, глобальные переменные, очередь — исходник правды
-content/           prompts.yaml (служебные фразы), faq.yaml (черновые ответы)
+content/           prompts.yaml (служебные фразы), faq.yaml (резервная копия ответов)
 deploy/            systemd-юниты обоих сервисов
 docs/              документация (см. ниже)
-tests/             129 тестов
+tests/             130 тестов
 ```
 
 ## 5. Инварианты — не нарушать
@@ -172,6 +172,8 @@ make barge-test               # звонок с перебиванием
 make agent-on                 # подставной оператор в очередь
 make calls                    # последние звонки с задержками
 make backup                   # копия базы
+make sql Q="select …"         # заглянуть в базу (системный sqlite3 её не читает)
+make voice-prewarm            # озвучить все фразы разово (ARGS=--dry-run — только счёт)
 make crm-user USER_LOGIN=… USER_PASSWORD=… USER_ROLE=operator
 ```
 
@@ -233,5 +235,5 @@ asterisk -rx "channel originate Local/998901234567@eduvoice-demo/n extension qhe
 | `docs/CHECKS.md` | проверка всей системы за 10 минут, с ожидаемым выводом |
 | `docs/OPERATIONS.md` | сервер, деплой, диагностика, приватность |
 | `docs/AUDIT.md` | независимый аудит кода и что исправлено |
-| `docs/VOICELAB-TASKS.md` | задание человеку B |
+| `docs/VOICELAB-TASKS.md` | разбор API VoiceLab: обещанное документацией против фактического |
 | `PLAN.md`, `TASKS.md` | исходный план и маршрут работ с отметками о проверке |

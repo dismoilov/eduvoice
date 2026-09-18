@@ -92,6 +92,42 @@ def test_outcomes_tell_the_three_cases_apart():
     assert outcome_of("operator", "caller_hangup", 0) == "dropped"
 
 
+def test_a_turn_that_delivered_nothing_is_not_an_answer():
+    """Every service phrase also makes a turn, and each one carries a measured latency.
+
+    Counting turns, or turns with a latency, scored "I did not understand you" and "I am
+    transferring you" as questions answered — so a caller who got nothing useful and hung
+    up in frustration was filed as handled, and vanished from the follow-up worklist.
+    """
+    from store.write import delivered_answers
+
+    latency = {"total_ms": 520.0}
+    assert (
+        delivered_answers([{"action": "clarify", "answer": "Tushunmadim.", "latency_ms": latency}])
+        == 0
+    )
+    assert (
+        delivered_answers([{"action": "transfer", "answer": "Ulayman.", "latency_ms": latency}])
+        == 0
+    )
+    assert (
+        delivered_answers([{"action": "goodbye", "answer": "Sogʻ boʻling.", "latency_ms": latency}])
+        == 0
+    )
+    assert (
+        delivered_answers([{"action": "faq", "answer": "Stipendiya…", "latency_ms": latency}]) == 1
+    )
+    assert delivered_answers([{"action": "answer", "answer": "", "latency_ms": latency}]) == 0
+
+    # The whole truth table the bridge can produce.
+    assert outcome_of("operator", "transfer", 0) == "operator"
+    assert outcome_of("operator", "tech_problem", 1) == "operator"
+    assert outcome_of("hangup", "goodbye", 0) == "dropped", "nothing was said to the caller"
+    assert outcome_of("hangup", "goodbye", 1) == "bot"
+    assert outcome_of("operator", "caller_hangup", 0) == "dropped"
+    assert outcome_of("operator", "caller_hangup", 2) == "bot"
+
+
 def test_hanging_up_after_the_answer_counts_as_served():
     """The commonest happy ending on a real line: the answer is heard, the call ends.
 

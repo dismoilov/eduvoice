@@ -49,7 +49,7 @@ class Faq:
             faq_id: FaqEntry(
                 faq_id=faq_id,
                 answer=" ".join(str(item.get("answer", "")).split()),
-                keywords=[str(k).lower() for k in item.get("keywords", [])],
+                keywords=[fold(str(k)) for k in item.get("keywords", [])],
                 source=str(item.get("source", "")),
             )
             for faq_id, item in raw.items()

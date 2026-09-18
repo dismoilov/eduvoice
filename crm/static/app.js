@@ -124,8 +124,10 @@ document.addEventListener("keydown", (event) => {
   const unhandledRow = document.getElementById("unhandled-row");
   const strings = document.body.dataset;
 
+  /* Zero means "nothing answered yet", which the server-rendered page shows as a dash.
+     Printing "0 ms" here made a quiet morning read as if answers took no time at all. */
   const asMs = (value) =>
-    value >= 1000 ? `${(value / 1000).toFixed(1)} s` : `${Math.round(value)} ms`;
+    !value ? "—" : value >= 1000 ? `${(value / 1000).toFixed(1)} s` : `${Math.round(value)} ms`;
 
   /* Counts from the old number to the new one, so a change is noticed instead of
      silently replacing a digit. Long jumps are still short in time. */

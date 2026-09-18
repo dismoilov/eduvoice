@@ -154,3 +154,69 @@ async def test_wait_drained_times_out_instead_of_hanging():
 
     assert await out.wait_drained(timeout=0.05) is False
     await out.aclose()
+
+
+class DeafSpeechToText:
+    """Recognition that always hears nothing — a noisy line, or a caller speaking Russian.
+
+    This is not an error: the real provider answers `no_speech_detected` and the bridge is
+    meant to ask the caller to repeat. The danger is asking forever.
+    """
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def open(self, language: str) -> None:
+        return None
+
+    async def transcribe(self, pcm16k: bytes):
+        from eduvoice.interfaces import Transcript
+
+        self.calls += 1
+        return Transcript(text="", language="uz", duration_ms=0, latency_ms=1)
+
+    async def close(self) -> None:
+        return None
+
+
+async def test_speech_that_is_never_recognised_ends_with_a_person_not_an_endless_loop():
+    """Each lap costs a paid recognition, so the loop must be bounded and end with a human.
+
+    Before this was fixed the caller could circle for the whole six-minute call limit: the
+    turn counter only advanced on a *recognised* utterance, so nothing ever escalated.
+    """
+    call_id = str(uuid.uuid4())
+    reader, _writer, registry, session = build(BrokenChatModel())
+    session._stt = DeafSpeechToText()
+    reader.feed_data(encode(0x01, uuid.UUID(call_id).bytes))
+
+    task = asyncio.create_task(session.run())
+    for _ in range(6):  # keep talking into a line that recognises nothing
+        if session.state == "closing":
+            break
+        await ask(reader, session)
+        await asyncio.sleep(0.15)
+    await wait_for(lambda: session.state == "closing", timeout=12)
+    reader.feed_eof()
+    await asyncio.wait_for(task, timeout=5)
+
+    assert registry.next_action(call_id) == "operator", "the caller must reach a person"
+    assert session._stt.calls <= 4, f"paid recognition ran {session._stt.calls} times"
+
+
+async def test_a_long_answer_is_given_time_to_be_synthesised():
+    """The provider renders the whole phrase before sending any of it.
+
+    So the wait for the first sound grows with the length of the answer. A flat deadline
+    fits a greeting and cuts off a full regulation — and a synthesis cut off that way is
+    paid for, never cached, and ends with the caller handed to an operator.
+    """
+    _reader, _writer, _registry, session = build(BrokenChatModel())
+
+    short = session._first_chunk_budget("Salom.")
+    regulation = session._first_chunk_budget("A" * 300)
+
+    assert short == pytest.approx(CONFIG.tts_first_chunk_timeout_s, abs=0.1)
+    assert regulation > short + 2, "a 300-character answer got no more time than a greeting"
+    # Measured on the live service: 214 characters took 1.40 s end to end.
+    assert session._first_chunk_budget("A" * 214) > 1.4

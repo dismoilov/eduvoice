@@ -100,3 +100,22 @@ def test_an_apostrophe_never_breaks_the_fast_path():
     assert faq.match("Akademik ta'til qanday rasmiylashtiriladi") is not None
     assert faq.match("akademik ta`til") is not None
     assert faq.match("AKADEMIK TAʼTIL") is not None
+
+
+def test_keywords_from_the_file_survive_the_apostrophe_the_recogniser_uses(tmp_path):
+    """Recognition returns `ta'til`; the answers are written `taʼtil`. One letter, two codes.
+
+    The database loader folded them and the file loader did not, so five of the shipped
+    keywords — every one containing `oʻ`, `gʻ` or `ʼ` — could never match. The file is the
+    fallback used when the CRM has no answers yet, which is exactly the path nobody tries
+    by hand.
+    """
+    from eduvoice.content import Faq
+
+    (tmp_path / "faq.yaml").write_text(
+        "transfer:\n  keywords: [koʻchirish]\n  answer: Javob.\n", encoding="utf-8"
+    )
+    faq = Faq.load(tmp_path)
+
+    for spelling in ("koʻchirish haqida", "ko'chirish haqida", "KOʻCHIRISH"):
+        assert faq.match(spelling) is not None, f"{spelling!r} did not reach the answer"

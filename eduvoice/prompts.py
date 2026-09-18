@@ -10,6 +10,7 @@ The cache is filled at start-up (`prewarm`) and, if something was missed, on fir
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -81,10 +82,23 @@ class PromptLibrary:
                 log.warning("could not prepare prompt %s: %s", prompt_id, exc)
         return ready
 
-    def _from_disk(self, prompt_id: str) -> bytes | None:
+    def _cached_path(self, prompt_id: str) -> Path | None:
+        """The file name carries a fingerprint of the text, not just the phrase id.
+
+        Keyed by id alone, an edited phrase kept playing in the caller's ear forever: the
+        old file still matched, so nothing was ever re-synthesised, while the CRM showed
+        the new wording next to audio of the old one. A missed file costs nothing — the
+        synthesis layer beneath keeps its own cache, keyed by the same text.
+        """
         if self._cache_dir is None:
             return None
-        path = self._cache_dir / f"{prompt_id}.pcm"
+        fingerprint = hashlib.sha256(self.text(prompt_id).encode()).hexdigest()[:8]
+        return self._cache_dir / f"{prompt_id}-{fingerprint}.pcm"
+
+    def _from_disk(self, prompt_id: str) -> bytes | None:
+        path = self._cached_path(prompt_id)
+        if path is None:
+            return None
         try:
             return path.read_bytes() if path.exists() else None
         except OSError as exc:
@@ -93,12 +107,12 @@ class PromptLibrary:
 
     def _to_disk(self, prompt_id: str, pcm: bytes) -> None:
         """Writes through a temporary file: a reader never sees a half-written phrase."""
-        if self._cache_dir is None:
+        path = self._cached_path(prompt_id)
+        if path is None:
             return
-        path = self._cache_dir / f"{prompt_id}.pcm"
         temporary = path.with_suffix(f".{os.getpid()}.tmp")
         try:
-            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            path.parent.mkdir(parents=True, exist_ok=True)
             temporary.write_bytes(pcm)
             os.replace(temporary, path)
         except OSError as exc:  # read-only deployment, not fatal

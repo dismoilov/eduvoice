@@ -112,18 +112,35 @@ def backup(args: argparse.Namespace) -> int:
 
 
 def sql(args: argparse.Namespace) -> int:
-    """Runs one read-only query against the database.
+    """Runs one query against the database, with SQLite itself enforcing read-only.
 
     The system `sqlite3` on this server is from 2013 and understands neither full-text
     search nor indexes built on expressions; it answers "malformed database schema" for a
     database that is perfectly healthy. This command uses the SQLite that ships with the
     project's Python, so there is always a safe way to look inside.
+
+    Read-only is the connection, not a check on the text. Refusing queries that merely
+    start with the wrong word is no defence: SQLite happily runs `WITH x AS (…) DELETE …`,
+    and a single `PRAGMA user_version = 0` makes the file unopenable by anything, which
+    would silently stop the bridge recording calls. Opened `mode=ro`, the database itself
+    refuses every one of those.
     """
-    db = open_database(settings.db_path)
-    if not args.query.lstrip().lower().startswith(("select", "pragma", "explain", "with")):
-        print("only read-only queries are allowed here (select / with / pragma / explain)")
+    import sqlite3
+
+    try:
+        db = sqlite3.connect(f"file:{settings.db_path}?mode=ro", uri=True)
+    except sqlite3.Error as exc:
+        print(f"could not open {settings.db_path}: {exc}")
         return 1
-    rows = db.execute(args.query).fetchall()
+    db.row_factory = sqlite3.Row
+    try:
+        rows = db.execute(args.query).fetchall()
+    except sqlite3.Error as exc:
+        print(f"{exc} (this connection is read-only by design)")
+        return 1
+    finally:
+        db.close()
+
     if not rows:
         print("(no rows)")
         return 0
