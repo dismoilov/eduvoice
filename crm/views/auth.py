@@ -64,8 +64,11 @@ def login(
     return response
 
 
-@router.get("/logout")
-def logout(request: Request):
+@router.post("/logout")
+def logout(request: Request, csrf: str = Form("")):
+    """POST, not GET: an `<img src="/logout">` on any page would log the operator out."""
+    if not csrf_ok(request.app.state.session_secret, request.cookies.get(SESSION_COOKIE), csrf):
+        return redirect("/")
     response = redirect("/login")
     response.delete_cookie(SESSION_COOKIE)
     return response

@@ -268,13 +268,51 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
 
 
 def migrate(connection: sqlite3.Connection) -> int:
-    """Brings the database up to date. Returns the schema version it ended on."""
-    version = connection.execute("PRAGMA user_version").fetchone()[0]
-    for number, script in enumerate(MIGRATIONS[version:], start=version + 1):
-        with transaction(connection):
-            connection.executescript(script)
-            connection.execute(f"PRAGMA user_version={number}")
-    return connection.execute("PRAGMA user_version").fetchone()[0]
+    """Brings the database up to date. Returns the schema version it ended on.
+
+    One step, one transaction, version stamp included. That takes care: the obvious
+    `executescript` inside a transaction block does not give it, because `executescript`
+    commits whatever is open before it runs a thing. A step that failed halfway therefore
+    used to leave its first half committed and the version unchanged — so every later
+    start replayed it, hit "table already exists", and the database could never be opened
+    again.
+
+    The version is read inside the same `BEGIN IMMEDIATE` that applies the step, so the
+    bridge and the CRM starting together cannot both decide to apply the same one.
+    """
+    while True:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+            if version >= len(MIGRATIONS):
+                connection.execute("COMMIT")
+                return version
+            for statement in _statements(MIGRATIONS[version]):
+                connection.execute(statement)
+            connection.execute(f"PRAGMA user_version={version + 1}")
+            connection.execute("COMMIT")
+        except BaseException:
+            connection.execute("ROLLBACK")
+            raise
+
+
+def _statements(script: str) -> list[str]:
+    """Splits a migration into statements, keeping `CREATE TRIGGER … BEGIN … END;` whole.
+
+    `executescript` would do the splitting for us, but it commits first — see `migrate`.
+    `sqlite3.complete_statement` is the same test SQLite's own shell uses to decide
+    whether it has a whole statement yet, so triggers survive it.
+    """
+    statements: list[str] = []
+    current = ""
+    for line in script.splitlines(keepends=True):
+        current += line
+        if current.strip() and sqlite3.complete_statement(current):
+            statements.append(current)
+            current = ""
+    if current.strip():
+        statements.append(current)
+    return statements
 
 
 def open_database(path: Path | str | None = None) -> sqlite3.Connection:

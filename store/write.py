@@ -90,6 +90,17 @@ def save_call(connection: sqlite3.Connection, entry: dict[str, Any]) -> int:
     measured = [value for value in measured if value]
     with transaction(connection):
         contact_id = upsert_contact(connection, entry.get("caller", ""))
+        # Tickets point at the call row, with ON DELETE SET NULL. Deleting and reinserting
+        # the call therefore quietly cut every ticket loose from the conversation it came
+        # from — losing the recording and the transcript inside the ticket, and putting
+        # closed calls back on the "nobody has handled this" list. Re-attach them after.
+        orphaned = [
+            int(row["id"])
+            for row in connection.execute(
+                "SELECT t.id FROM tickets t JOIN calls c ON c.id = t.call_id WHERE c.call_id = ?",
+                (entry["call_id"],),
+            )
+        ]
         connection.execute("DELETE FROM calls WHERE call_id = ?", (entry["call_id"],))
         cursor = connection.execute(
             """
@@ -118,6 +129,11 @@ def save_call(connection: sqlite3.Connection, entry: dict[str, Any]) -> int:
             ),
         )
         call_row_id = int(cursor.lastrowid or 0)
+        if orphaned:
+            connection.executemany(
+                "UPDATE tickets SET call_id = ? WHERE id = ?",
+                [(call_row_id, ticket_id) for ticket_id in orphaned],
+            )
         for position, turn in enumerate(turns, start=1):
             latency = turn.get("latency_ms") or {}
             connection.execute(
@@ -175,6 +191,9 @@ def import_jsonl(logs_dir: Path, connection: sqlite3.Connection) -> int:
                 if entry.get("call_id"):
                     save_call(connection, entry)
                     imported += 1
-            except (ValueError, KeyError, sqlite3.Error) as exc:
+            except (ValueError, KeyError, TypeError, AttributeError, sqlite3.Error) as exc:
+                # A line that is valid JSON but not an object — `[]`, `"text"`, `null` —
+                # raises AttributeError rather than ValueError, and used to end the whole
+                # import halfway with no word of how much had been loaded.
                 log.warning("skipping a damaged line in %s: %s", path.name, exc)
     return imported

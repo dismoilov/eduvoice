@@ -54,7 +54,7 @@
   </table>
   {% if has_next or page_no > 1 %}
   <div class="pager">
-    {% set base = '/calls?q=' ~ q ~ '&outcome=' ~ outcome ~ '&day=' ~ day ~ ('&unhandled=1' if unhandled else '') %}
+    {% set base = '/calls?q=' ~ q|urlencode ~ '&outcome=' ~ outcome|urlencode ~ '&day=' ~ day|urlencode ~ ('&unhandled=1' if unhandled else '') %}
     <a class="btn sm {{ 'disabled' if page_no <= 1 }}" href="{{ base }}&page_no={{ page_no - 1 }}"
        {% if page_no <= 1 %}aria-disabled="true"{% endif %}>←</a>
     <span class="muted num">{{ page_no }}</span>

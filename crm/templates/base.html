@@ -36,7 +36,10 @@
     <div class="foot">
       <div class="who">{{ user.name }}</div>
       <div>{{ t('role_' + user.role) }}{% if user.extension %} · {{ user.extension }}{% endif %}</div>
-      <div class="mt"><a href="/logout">{{ t('logout') }}</a></div>
+      <form class="mt" method="post" action="/logout">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn ghost sm" type="submit">{{ t('logout') }}</button>
+      </form>
     </div>
     {% endif %}
   </aside>

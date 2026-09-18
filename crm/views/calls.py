@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from crm import repo
 from crm.config import settings
 from crm.deps import current_user, get_db, page, redirect
-from crm.views.common import require_csrf
+from crm.views.common import MAX_PAGE, as_id, require_csrf
 
 router = APIRouter(prefix="/calls")
 
@@ -26,7 +26,7 @@ def call_list(
     db: sqlite3.Connection = Depends(get_db),
 ):
     """One page of calls. Deep history stays reachable, but is never rendered in one go."""
-    page_no = max(1, page_no)
+    page_no = min(max(1, page_no), MAX_PAGE)
     size = 100
     found = repo.calls(
         db,
@@ -98,7 +98,7 @@ def ticket_from_call(
         call_pk=call_pk,
         category=category,
         priority=priority,
-        assignee_id=int(assignee_id) if assignee_id else None,
+        assignee_id=as_id(assignee_id),
         sla_hours=settings.sla_hours,
     )
     repo.audit(

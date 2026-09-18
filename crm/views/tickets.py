@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from crm import repo
 from crm.config import settings
 from crm.deps import current_user, get_db, page, redirect
-from crm.views.common import require_csrf
+from crm.views.common import as_id, require_csrf
 
 router = APIRouter(prefix="/tickets")
 
@@ -152,7 +152,7 @@ def ticket_update(
     if priority in repo.PRIORITIES:
         fields["priority"] = priority
     if assignee_id != "":
-        fields["assignee_id"] = int(assignee_id) if assignee_id else None
+        fields["assignee_id"] = as_id(assignee_id)
     if category:
         fields["category"] = category
     if resolution:

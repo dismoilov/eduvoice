@@ -1,6 +1,7 @@
 """The shared database: schema, writing calls, importing the old journals."""
 
 import json
+import sqlite3
 
 import pytest
 
@@ -186,3 +187,66 @@ def test_only_published_answers_reach_the_assistant(tmp_path, db):
 
     assert set(entries) == {"stipend"}
     assert entries["stipend"]["keywords"] == ["stipendiya"]
+
+
+def test_reimporting_a_call_keeps_the_ticket_attached_to_it(tmp_path):
+    """`import-history` is documented as safe to run twice, and an operator may well do it.
+
+    Re-saving a call deletes and reinserts the row, and tickets reference it with
+    ON DELETE SET NULL — so the second run used to cut every ticket loose from its
+    conversation. The recording and the transcript disappear from the ticket, and the
+    call reappears on the "nobody has handled this" list as if it were new.
+    """
+    from crm import repo
+    from crm.security import hash_password
+    from store.db import open_database
+    from store.write import save_call
+
+    db = open_database(tmp_path / "again.db")
+    author = repo.create_user(db, "boss", "Boss", "supervisor", hash_password("x" * 10), "")
+    entry = {
+        "call_id": "call-xyz",
+        "caller": "998901112233",
+        "started_at": "2026-09-18 10:00:00",
+        "duration_s": 42,
+        "next_action": "hangup",
+        "ended_reason": "goodbye",
+        "turns": [{"question": "Stipendiya?", "answer": "Javob.", "action": "faq"}],
+    }
+    call_id = save_call(db, entry)
+    ticket_id = repo.create_ticket(db, subject="S", body="", author_id=author, call_pk=call_id)
+
+    save_call(db, entry)  # the very same journal line, imported a second time
+
+    attached = db.execute("SELECT call_id FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
+    assert attached["call_id"] is not None, "the ticket lost the call it came from"
+    assert (
+        attached["call_id"]
+        == db.execute("SELECT id FROM calls WHERE call_id = 'call-xyz'").fetchone()["id"]
+    )
+
+
+def test_a_migration_that_fails_halfway_leaves_nothing_behind(tmp_path, monkeypatch):
+    """Otherwise the database can never be opened again — the worst outcome there is.
+
+    `executescript` commits whatever is open before it runs, so a step that failed in the
+    middle used to leave its first half committed with the version unchanged. Every later
+    start replayed the same step, hit "table already exists", and gave up.
+    """
+    import store.db as db_module
+    from store.db import connect, migrate
+
+    monkeypatch.setattr(
+        db_module,
+        "MIGRATIONS",
+        ["CREATE TABLE good (x TEXT);", "CREATE TABLE half (x TEXT);\nCREATE TABLE half (x TEXT);"],
+    )
+    db = connect(tmp_path / "broken.db")
+
+    with pytest.raises(sqlite3.OperationalError):
+        migrate(db)
+
+    tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+    assert "half" not in tables, "half of a failed migration stayed behind"
+    assert db.execute("PRAGMA user_version").fetchone()[0] == 1, "the first step should hold"
+    assert not db.in_transaction, "the connection was left inside a transaction"

@@ -503,3 +503,47 @@ def test_the_sql_helper_reads_but_refuses_to_write(tmp_path, monkeypatch, capsys
     survivor = open_database(database)
     assert survivor.execute("SELECT count(*) FROM users").fetchone()[0] == 1
     assert survivor.execute("PRAGMA user_version").fetchone()[0] > 0, "the schema was wiped"
+
+
+# ------------------------------------------------- input nobody types on purpose
+
+
+def test_odd_input_gives_a_page_rather_than_a_traceback(client):
+    """Values a browser can produce but a form never offers: a stray character in a
+    select box, a page number pasted from nowhere. Each one used to reach `int()` bare
+    and come back as an unhandled 500 with a traceback on screen."""
+    sign_in(client, "boss")
+
+    assert client.get("/calls?page_no=99999999999999999999").status_code == 200
+    assert client.get("/calls?page_no=-4").status_code == 200
+
+    csrf = token(client)
+    answer = client.post(
+        "/tickets/1", data={"csrf": csrf, "assignee_id": "x", "status": "in_progress"}
+    )
+    assert answer.status_code in (303, 404), f"unexpected {answer.status_code}"
+
+
+def test_a_search_with_a_hash_keeps_its_filters_on_the_next_page(client):
+    """Everything after `#` is a fragment the browser never sends.
+
+    Unencoded, the pager link dropped the day filter and silently returned page one.
+    """
+    sign_in(client, "boss")
+
+    page = client.get("/calls?q=stipendiya%23&day=2026-09-18&page_no=2").text
+
+    assert "q=stipendiya%23" in page, "the search term was not encoded into the pager link"
+    assert "#" not in page[page.index("pager") : page.index("pager") + 400]
+
+
+def test_logging_out_needs_a_form_and_a_token(client):
+    """`<img src="/logout">` on any page would otherwise sign the operator out."""
+    sign_in(client)
+
+    assert client.get("/logout").status_code == 405, "logout must not answer a GET"
+    assert client.post("/logout", data={"csrf": "wrong"}).headers["location"] == "/"
+    assert client.get("/calls").status_code == 200, "the session should have survived"
+
+    assert client.post("/logout", data={"csrf": token(client)}).headers["location"] == "/login"
+    assert client.get("/calls").status_code == 303, "the session should be gone"
