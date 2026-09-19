@@ -204,3 +204,38 @@ def test_the_loudness_gate_still_hears_someone_on_a_quiet_line():
     for _ in range(100):
         gate(quiet_room)
     assert gate(ordinary_voice) is True, "an ordinary voice on a quiet line was ignored"
+
+
+def test_a_question_asked_over_the_greeting_is_handed_back_not_dropped():
+    """`seed` replays what the caller said while the assistant was talking. A question
+    that *finished* during that replay used to be returned by `push` and ignored, so
+    somebody who asked in full over the greeting was answered with "say your question".
+    """
+    import numpy as np
+
+    from eduvoice.vad import SpeechDetector
+
+    rng = np.random.default_rng(11)
+    loud = (rng.standard_normal(160) * 2500).astype(np.int16).tobytes()
+    quiet = (rng.standard_normal(160) * 20).astype(np.int16).tobytes()
+    detector = SpeechDetector(base_settings)
+
+    spoken = detector.seed([quiet] * 20 + [loud] * 60 + [quiet] * 60)
+
+    assert spoken, "a question finished during the replay and was thrown away"
+    assert spoken[-1].duration_ms > 800
+
+
+def test_waiting_for_the_assistant_to_stop_is_not_the_caller_s_silence():
+    """The reprompt counts how long the caller has been quiet. Counting the seconds they
+    spent waiting for a long greeting made it fire the instant the greeting ended."""
+    import numpy as np
+
+    from eduvoice.vad import SpeechDetector
+
+    quiet = (np.random.default_rng(5).standard_normal(160) * 20).astype(np.int16).tobytes()
+    detector = SpeechDetector(base_settings)
+
+    detector.seed([quiet] * 400)  # eight seconds of greeting, caller politely waiting
+
+    assert detector.silence_ms == 0, f"{detector.silence_ms:.0f} ms counted against them"

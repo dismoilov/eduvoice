@@ -40,7 +40,11 @@ class Settings:
 
     # --- speech detection (tuned on real calls, see TASKS.md A13) ---------
     language: Language = "uz"  # Uzbek-only service
-    vad_aggressiveness: int = _int("VAD_AGGRESSIVENESS", 2)
+    # 3, the strictest. Measured on the caller's own leg of a real call from the venue:
+    # at 2 the crowd murmur is called speech on 70 % of frames — including 56 % of frames
+    # quieter than RMS 100 — so 700 ms of silence never occurs and a phrase can only end
+    # by hitting the length limit. At 3 that falls to 13 % and phrases end properly.
+    vad_aggressiveness: int = _int("VAD_AGGRESSIVENESS", 3)
     speech_start_frames: int = _int("SPEECH_START_FRAMES", 3)  # of 5 frames = ~60 ms
     speech_start_window: int = _int("SPEECH_START_WINDOW", 5)
     silence_end_frames: int = _int("SILENCE_END_FRAMES", 35)  # 700 ms of silence ends a phrase
@@ -52,21 +56,31 @@ class Settings:
     # How much louder than the room a frame must be to count as the caller talking.
     # 1.0 turns the test off and trusts the voice detector alone, which is right on a
     # quiet line and useless in a hall. Measured at the venue: room RMS ~3400.
-    # 1.5 measured against recordings from the hall: at 1.8 a question came apart into
-    # 400 ms fragments, at 1.3 the room came with it. Here a question arrives whole,
-    # about two seconds of it.
-    loudness_margin: float = _float("LOUDNESS_MARGIN", 1.5)
-    # The same test for interrupting the assistant, but stricter: cutting a caller off
-    # mid-answer is worse than making them repeat themselves, and in a hall the room was
-    # doing it within a second of the answer starting.
-    barge_in_margin: float = _float("BARGE_IN_MARGIN", 2.5)
+    # Multiplied by the room's level, floored at `loudness_floor_min`. On the real leg
+    # from the venue the room's tenth percentile is under 30 for four frames in five, so
+    # in practice this is an absolute threshold of `margin x floor_min` — 1000 by default.
+    # Measured there: both questions arrive whole, 1.5 and 1.7 s long, delivered 0.7 s
+    # after the last word, with one spurious phrase in twenty-four seconds. The earlier
+    # 1.5 was fitted to a mis-decoded stream whose "room" was fifty times too loud.
+    loudness_margin: float = _float("LOUDNESS_MARGIN", 10.0)
+    # The quietest a room is assumed to be. Keeps the threshold from collapsing onto a
+    # digitally silent line, and is what the margin multiplies on a quiet one: 30 x 10 =
+    # 300, which is the value that holds on both lines measured. At 100 (threshold 1000)
+    # the hall is still perfect but a quiet test line comes apart into 400 ms fragments.
+    loudness_floor_min: float = _float("LOUDNESS_FLOOR_MIN", 30.0)
+    # Interrupting the assistant needs the same evidence as starting a phrase: measured
+    # at the venue, anything gentler let the room itself cut the answer off within two
+    # seconds, and nothing harsher was needed — the caller still interrupts 0.3-0.5 s
+    # after they start speaking, on both the hall line and a clean one.
+    barge_in_margin: float = _float("BARGE_IN_MARGIN", 10.0)
     # Whether the caller may talk over the greeting. Off: a first-time caller must hear
     # what the service is, and a noisy room interrupts it before they hear anything.
     interruptible_greeting: bool = os.getenv("INTERRUPTIBLE_GREETING", "") == "1"
     preroll_ms: int = _int("PREROLL_MS", 300)  # audio kept before speech starts
     # How much of what the caller says while the assistant is talking is carried over to
-    # the moment it stops. Long enough for a whole question asked over us.
-    carry_over_s: float = _float("CARRY_OVER_S", 6.0)
+    # the moment it stops. Longer than the greeting (8.8 s), or someone who answers it in
+    # its first seconds has already fallen out of the buffer by the time it ends.
+    carry_over_s: float = _float("CARRY_OVER_S", 10.0)
     # A phrase this long is sent for recognition even if the noise never lets it end.
     # Better a recognition that fails — and, after three, a person — than a caller
     # talking into a system that is still waiting for a silence that will not come.

@@ -117,7 +117,7 @@ class SpeechDetector:
         cfg = config or default_settings
         vad = speech_test or WebrtcSpeechTest(cfg.vad_aggressiveness)
         if speech_test is None and cfg.loudness_margin > 1.0:
-            gate = LoudnessGate(cfg.loudness_margin)
+            gate = LoudnessGate(cfg.loudness_margin, quietest=cfg.loudness_floor_min)
 
             def heard(frame: bytes) -> bool:
                 # The gate runs on every frame, whatever the detector thinks, or the room
@@ -147,15 +147,26 @@ class SpeechDetector:
         self._idle_frames = 0
         self.in_speech = False
 
-    def seed(self, frames: list[bytes]) -> None:
-        """Replay frames the caller already spoke (barge-in) as if they had just arrived.
+    def seed(self, frames: list[bytes]) -> list[Utterance]:
+        """Replay what the caller said while we were talking, as if it had just arrived.
 
-        Without this the first ~300 ms of an interruption — the frames that proved the
-        caller was talking — would be thrown away and recognition would get a fragment.
+        Returns any phrase that *finished* during the replay — someone who asked their
+        whole question over the greeting and then waited. Those used to be dropped on the
+        floor: `push` returned them and nobody looked, so the caller was answered with
+        "say your question" over a question they had just asked in full.
+
+        Silence inside the replay is not the caller's silence either. They were waiting
+        for us to stop, and counting it made the reprompt fire the instant we did — a
+        six-second greeting was followed immediately by "say your question".
         """
+        found: list[Utterance] = []
         for frame in frames:
             if len(frame) == self._frame_bytes:
-                self.push(frame)
+                utterance = self.push(frame)
+                if utterance is not None:
+                    found.append(utterance)
+        self._idle_frames = 0
+        return found
 
     @property
     def silence_ms(self) -> float:
@@ -213,7 +224,7 @@ class BargeInDetector:
         cfg = config or default_settings
         vad = speech_test or WebrtcSpeechTest(cfg.vad_aggressiveness)
         if speech_test is None and cfg.barge_in_margin > 1.0:
-            gate = LoudnessGate(cfg.barge_in_margin)
+            gate = LoudnessGate(cfg.barge_in_margin, quietest=cfg.loudness_floor_min)
 
             def heard(frame: bytes) -> bool:
                 loud_enough = gate(frame)

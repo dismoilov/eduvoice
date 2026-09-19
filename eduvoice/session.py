@@ -294,9 +294,15 @@ class CallSession:
         """
         self._state = "listening"
         self._speech.reset()
-        if self._recent:
-            self._speech.seed(list(self._recent))
-            self._recent.clear()
+        if not self._recent:
+            return
+        asked_already = self._speech.seed(list(self._recent))
+        self._recent.clear()
+        if asked_already:
+            # They asked while we were talking and are now waiting for the answer. The
+            # last one is the question they are waiting on.
+            log.info("call %s: question asked while we were speaking", self.call_id)
+            self._think(asked_already[-1])
 
     def _speak_prompt(self, prompt_id: str) -> None:
         """Play a service phrase (cached audio, no synthesis delay)."""
