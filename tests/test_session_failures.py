@@ -19,7 +19,7 @@ from eduvoice.interfaces import ChatMessage
 from eduvoice.prompts import PromptLibrary
 from eduvoice.registry import CallRegistry, Turn
 from eduvoice.session import CallSession
-from eduvoice.vad import BargeInDetector, SpeechDetector
+from eduvoice.vad import BargeInDetector, SpeechDetector, Utterance
 from tests.test_session import CONFIG, PROMPTS, QUIET, SPEECH, StubWriter, is_speech_frame
 
 
@@ -79,8 +79,10 @@ async def wait_for(condition, timeout: float = 5.0) -> None:
 
 
 async def ask(reader, session) -> None:
+    """Long enough to be a question: anything under 600 ms is dropped as a fragment,
+    because the recogniser refuses audio under half a second."""
     await wait_for(lambda: session.state == "listening")
-    for frame in [SPEECH] * 10 + [QUIET] * 10:
+    for frame in [SPEECH] * 40 + [QUIET] * 10:
         reader.feed_data(encode(0x10, frame))
 
 
@@ -370,3 +372,33 @@ async def test_a_question_finished_over_the_answer_is_not_undone_by_the_second_l
     assert started == "thinking", "a finished question did not start a turn"
     assert session.state == "thinking", "the second call undid the turn"
     await session.aclose()
+
+
+async def test_a_fragment_of_room_noise_is_not_sent_for_recognition():
+    """The service refuses audio under half a second, and the bridge read that refusal as
+    the provider failing — so a cough during the greeting ended the call with "technical
+    problem, transferring you". Seen on a real call: the carry-over handed over a burst of
+    room noise, recognition rejected it, and the caller lost the conversation.
+    """
+    _reader, _writer, _registry, session = build(BrokenChatModel())
+
+    class Counting:
+        def __init__(self) -> None:
+            self.asked = 0
+
+        async def open(self, language: str) -> None:
+            return None
+
+        async def transcribe(self, pcm16k: bytes):
+            self.asked += 1
+            raise AssertionError("a fragment must never reach recognition")
+
+        async def close(self) -> None:
+            return None
+
+    session._stt = Counting()
+    fragment = Utterance(pcm8k=b"\x00\x01" * 1200, ended_by="silence")  # 300 ms
+    assert fragment.duration_ms < 600
+
+    assert await session._decide(fragment) is None
+    assert session._stt.asked == 0

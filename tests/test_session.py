@@ -92,8 +92,12 @@ def start_call(reader: asyncio.StreamReader, call_id: str) -> None:
     reader.feed_data(encode(KIND_UUID, uuid.UUID(call_id).bytes))
 
 
-async def ask(reader, session, frames: int = 10) -> None:
-    """Waits for the bot to finish talking, then says something and goes quiet."""
+async def ask(reader, session, frames: int = 40) -> None:
+    """Waits for the bot to finish talking, then says something and goes quiet.
+
+    Forty frames is 800 ms: anything under 600 ms is dropped as a fragment, because the
+    recogniser refuses audio shorter than half a second.
+    """
     await wait_for(lambda: session.state == "listening")
     feed(reader, [SPEECH] * frames + [QUIET] * 10)
 

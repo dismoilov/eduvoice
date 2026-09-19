@@ -66,6 +66,9 @@ CLOSING_DRAIN_TIMEOUT_S = 15.0
 # Without a limit the call loops: the detector fires on noise, recognition hears nothing,
 # the assistant asks again — six minutes of that, and every lap is a paid recognition.
 MAX_UNHEARD = 3
+# Below this a fragment is not a question and cannot be recognised: the service rejects
+# audio under half a second, and a rejection is not the provider failing.
+MIN_UTTERANCE_MS = 600.0
 # Characters of text the synthesiser is assumed to render per second, on top of the flat
 # first-chunk allowance. Measured at ~150/s on the live service; 100 leaves a margin.
 CHARS_PER_SECOND_OF_BUDGET = 100.0
@@ -315,11 +318,14 @@ class CallSession:
             return
         asked_already = self._speech.seed(list(self._recent))
         self._recent.clear()
-        if asked_already:
+        spoken = [u for u in asked_already if u.duration_ms >= MIN_UTTERANCE_MS]
+        if spoken:
             # They asked while we were talking and are now waiting for the answer. The
-            # last one is the question they are waiting on.
+            # last one is the question they are waiting on. Fragments are dropped: a
+            # noisy room produces one or two per greeting, and answering those wastes a
+            # recognition and, worse, tells the caller they were not understood.
             log.info("call %s: question asked while we were speaking", self.call_id)
-            self._think(asked_already[-1])
+            self._think(spoken[-1])
 
     def _speak_prompt(self, prompt_id: str) -> None:
         """Play a service phrase (cached audio, no synthesis delay)."""
@@ -513,6 +519,17 @@ class CallSession:
         """Recognition + decision. Returns None when the caller said nothing recognisable."""
         started = time.monotonic()
         latency: dict[str, float] = {"utterance_ms": utterance.duration_ms}
+
+        if utterance.duration_ms < MIN_UTTERANCE_MS:
+            # Too short to be a word, and the service refuses anything under half a
+            # second outright — an error the bridge would read as "the provider is
+            # broken" and hand the caller to a person over a cough in the room.
+            log.info(
+                "call %s: %.0f ms of sound, too short to be a question",
+                self.call_id,
+                utterance.duration_ms,
+            )
+            return None
 
         pcm16k = resample(utterance.pcm8k, SAMPLE_RATE_TELEPHONY, SAMPLE_RATE_STT)
         transcript = await asyncio.wait_for(
