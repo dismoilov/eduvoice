@@ -2,6 +2,7 @@
 
 | Fayl | Nima |
 |---|---|
+| `EduVoice_pitch_deck_v4.pdf` | Pitch-dek: hakamlar hayʼati uchun taqdimot |
 | `eduvoice-texnik-himoya.html` | Texnik mentor uchun himoya, oʻzbek tilida, 13 slayd |
 
 Faylni brauzerda ochish kifoya — internet, oʻrnatish yoki yigʻish kerak emas.
