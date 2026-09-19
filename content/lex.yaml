@@ -1,0 +1,31 @@
+# The regulations the assistant is allowed to answer from, beyond the six FAQ entries.
+#
+# Each id is the document's own number on lex.uz: https://lex.uz/uz/docs/<id>.
+# `make lex-fetch` downloads them, splits them into clauses and indexes them locally;
+# nothing here is read during a call, only the database is.
+#
+# The first three are the decrees the FAQ answers already cite, so a question the FAQ
+# does not cover is answered from the same document the FAQ would have quoted.
+#
+# To add a document: open it on lex.uz, copy the number out of the address bar, add it
+# here with a comment, and run `make lex-fetch`.
+
+documents:
+  - id: "-4725554"
+    note: 59-son 31.01.2020 — stipendiyalar tayinlash va toʻlash tartibi
+  - id: "-5443081"
+    note: 344-son 03.06.2021 — akademik taʼtil berish toʻgʻrisidagi nizom
+  - id: "-7726569"
+    note: 578-son 13.09.2025 — oʻqishga qabul qilish, koʻchirish va tiklash
+  - id: "-8117474"
+    note: 3807-son 03.04.2026 — Oliy taʼlim toʻgʻrisidagi nizom
+  - id: "-5013007"
+    note: OʻRQ-637 23.09.2020 — "Taʼlim toʻgʻrisida"gi Qonun
+  - id: "-6568679"
+    note: 376-son 14.08.2023 — talabalarni turar joy bilan taʼminlash
+  - id: "-5657191"
+    note: 605-son 24.09.2021 — ijara toʻlovlarini qoplab berish
+  - id: "-7267040"
+    note: 836-son 13.12.2024 — yakuniy davlat attestatsiyasi
+  - id: "-8068466"
+    note: 3781-son 28.02.2026 — taʼlim yoʻnalishlari klassifikatori

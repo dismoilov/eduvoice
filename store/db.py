@@ -241,6 +241,55 @@ MIGRATIONS: list[str] = [
         ELSE 'dropped' END;
     CREATE INDEX turns_faq ON turns(faq_id);
     """,
+    # 6 — the regulations themselves, clause by clause, so a question the FAQ does not
+    #     cover can still be answered from the law instead of going straight to a person.
+    #     Downloaded from lex.uz once (`make lex-fetch`) and searched locally: at the
+    #     defence there may be no internet, and a caller cannot wait for a web page.
+    #     `element` is lex.uz's own anchor for that clause, which makes the citation a
+    #     link straight to it: https://lex.uz/uz/docs/<doc>#<element>.
+    """
+    CREATE TABLE lex_documents (
+        id         INTEGER PRIMARY KEY,
+        doc_id     TEXT NOT NULL UNIQUE,
+        number     TEXT NOT NULL DEFAULT '',
+        title      TEXT NOT NULL DEFAULT '',
+        url        TEXT NOT NULL DEFAULT '',
+        adopted_at TEXT NOT NULL DEFAULT '',
+        fetched_at TEXT NOT NULL DEFAULT '',
+        clauses    INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE lex_clauses (
+        id          INTEGER PRIMARY KEY,
+        document_id INTEGER NOT NULL REFERENCES lex_documents(id) ON DELETE CASCADE,
+        element     TEXT NOT NULL DEFAULT '',
+        band        TEXT NOT NULL DEFAULT '',
+        position    INTEGER NOT NULL DEFAULT 0,
+        text        TEXT NOT NULL,
+        -- the same text with every apostrophe removed. Uzbek writes "taʼtil", the
+        -- recogniser returns "ta'til" and a person types "ta`til"; worse, the FTS
+        -- tokenizer treats an apostrophe as a word break, so "taʼtil" would be indexed
+        -- as "ta" and "til" and never found. Folding both sides makes them one word.
+        search_text TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX lex_clauses_document ON lex_clauses(document_id, position);
+
+    CREATE VIRTUAL TABLE lex_fts USING fts5(
+        search_text, content='lex_clauses', content_rowid='id', tokenize='unicode61'
+    );
+    CREATE TRIGGER lex_fts_insert AFTER INSERT ON lex_clauses BEGIN
+        INSERT INTO lex_fts(rowid, search_text) VALUES (new.id, new.search_text);
+    END;
+    CREATE TRIGGER lex_fts_delete AFTER DELETE ON lex_clauses BEGIN
+        INSERT INTO lex_fts(lex_fts, rowid, search_text)
+        VALUES ('delete', old.id, old.search_text);
+    END;
+    CREATE TRIGGER lex_fts_update AFTER UPDATE ON lex_clauses BEGIN
+        INSERT INTO lex_fts(lex_fts, rowid, search_text)
+        VALUES ('delete', old.id, old.search_text);
+        INSERT INTO lex_fts(rowid, search_text) VALUES (new.id, new.search_text);
+    END;
+    """,
 ]
 
 _local = threading.local()

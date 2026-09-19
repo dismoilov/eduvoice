@@ -97,6 +97,11 @@ class Settings:
     tts_first_chunk_timeout_s: float = _float("TTS_FIRST_CHUNK_TIMEOUT_S", 3.0)
     max_turns: int = _int("MAX_TURNS", 8)
     max_call_s: float = _float("MAX_CALL_S", 360.0)
+    # Answering from the regulations themselves when the FAQ has nothing. Costs a second
+    # model call, and only on the turn that would otherwise have been "I did not
+    # understand you". LEX_ANSWERS=0 turns it off and the assistant behaves as before.
+    lex_answers: bool = os.getenv("LEX_ANSWERS", "1") != "0"
+    lex_clauses: int = _int("LEX_CLAUSES", 3)
     # Writes the audio the bridge receives to logs/<call-id>.raw — raw 8 kHz PCM. For
     # working out why a particular line is not understood; off unless asked for.
     dump_audio: bool = os.getenv("EDUVOICE_DUMP_AUDIO", "") == "1"

@@ -2,7 +2,7 @@ SERVER ?= root@10.103.10.86
 REMOTE ?= /opt/eduvoice/app
 SSH ?= ssh -o PubkeyAuthentication=no
 
-.PHONY: voice-prewarm sql install lint test check deploy deploy-dialplan logs restart status call-test barge-test say agent-on agent-off calls hangup-all crm-logs crm-restart crm-user backup
+.PHONY: lex-fetch lex-list lex-ask voice-prewarm sql install lint test check deploy deploy-dialplan logs restart status call-test barge-test say agent-on agent-off calls hangup-all crm-logs crm-restart crm-user backup
 
 install:            ## local environment
 	uv sync
@@ -45,6 +45,15 @@ USER_EXT ?=
 
 backup:             ## consistent copy of the CRM database, kept on the server
 	$(SSH) $(SERVER) 'cd $(REMOTE) && /usr/local/bin/uv run --no-sync python -m crm.cli backup /opt/eduvoice/data/backup-$$(date +%Y%m%d-%H%M).db && ls -lh /opt/eduvoice/data/*.db | tail -3'
+
+lex-fetch:          ## download the regulations from lex.uz into the local index
+	$(SSH) $(SERVER) 'cd $(REMOTE) && /usr/local/bin/uv run --no-sync python -m eduvoice.lex_tools fetch $(ARGS)'
+
+lex-list:           ## which regulations are indexed
+	$(SSH) $(SERVER) 'cd $(REMOTE) && /usr/local/bin/uv run --no-sync python -m eduvoice.lex_tools list'
+
+lex-ask:            ## make lex-ask Q="..." — which clauses a question would find
+	@printf '%s' "$(Q)" | $(SSH) $(SERVER) 'cd $(REMOTE) && /usr/local/bin/uv run --no-sync python -m eduvoice.lex_tools ask'
 
 voice-prewarm:      ## synthesise every phrase and answer into the cache (ARGS=--dry-run to only count)
 	$(SSH) $(SERVER) 'cd $(REMOTE) && /usr/local/bin/uv run --no-sync python -m eduvoice.voice_tools prewarm $(ARGS)'

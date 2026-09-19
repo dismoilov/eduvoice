@@ -25,6 +25,7 @@ from eduvoice.prompts import PromptLibrary
 from eduvoice.registry import CallRegistry, registry
 from eduvoice.session import CallSession
 from store.knowledge import PublishedKnowledge
+from store.lex import LexLibrary
 from store.write import CallStore
 
 log = logging.getLogger("eduvoice")
@@ -67,7 +68,7 @@ def send_to_a_person_unless_decided(calls: CallRegistry, call_id: str) -> None:
     calls.set_next(call_id, "operator")
 
 
-def make_call_handler(faq: Faq, prompts: PromptLibrary, knowledge=None, store=None):
+def make_call_handler(faq: Faq, prompts: PromptLibrary, knowledge=None, store=None, laws=None):
     """Builds the AudioSocket connection handler.
 
     Service phrases are loaded once at start-up: a missing file must break the service
@@ -97,6 +98,7 @@ def make_call_handler(faq: Faq, prompts: PromptLibrary, knowledge=None, store=No
                     faq=answers,
                     timeout_s=settings.llm_timeout_s,
                     max_turns=settings.max_turns,
+                    laws=laws,
                 ),
                 prompts=prompts,
                 registry=registry,
@@ -130,7 +132,9 @@ async def main() -> None:
         log.warning("running with FAKE providers: speech and answers are placeholders")
 
     faq = Faq.load(settings.content_dir)
-    prompts = PromptLibrary.load(settings.content_dir, settings.audio_dir)
+    prompts = PromptLibrary.load(
+        settings.content_dir, settings.audio_dir, settings.voicelab_voice_uz
+    )
     log.info("content: %d FAQ answers, greeting: %r", len(faq), prompts.text("greeting")[:40])
 
     # Synthesise the service phrases before the first caller arrives, so the greeting
@@ -148,8 +152,16 @@ async def main() -> None:
         len(published),
         len(faq),
     )
+    laws = (
+        LexLibrary(settings.db_path, limit=settings.lex_clauses) if settings.lex_answers else None
+    )
+    if laws is not None:
+        log.info(
+            "regulations: %d clauses indexed (a question the FAQ misses is answered from these)",
+            laws.clauses(),
+        )
     handler = make_call_handler(
-        faq, prompts, knowledge=knowledge, store=CallStore(settings.db_path)
+        faq, prompts, knowledge=knowledge, store=CallStore(settings.db_path), laws=laws
     )
     audio_server = await serve(handler, settings.audiosocket_host, settings.audiosocket_port)
     control_server = await serve_control_api(

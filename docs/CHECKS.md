@@ -14,7 +14,7 @@ make check
 ```
 
 Ожидается: `All checks passed!` от линтера, `Success: no issues found` от проверки типов
-и `209 passed` от тестов.
+и `227 passed` от тестов.
 
 ```bash
 uv run pytest -q --cov=eduvoice --cov-report=term
@@ -97,6 +97,106 @@ call 0db3e713-…: Asterisk sends 320-byte chunks
 call 0db3e713-…: heard 'stipendiya qanday olinadi'
 call 0db3e713-…: decision=faq intent=faq_keyword (302 ms total)
 call 0db3e713-… ended after 38.4 s, 1 turns (caller_hangup)
+```
+
+---
+
+## 2a. Вопрос, которого нет в базе знаний: ответ по самому закону
+
+База знаний покрывает шесть вопросов. Всё остальное раньше кончалось фразой «я вас не
+понял» и переводом на оператора — даже когда ответ прямо написан в постановлении.
+Теперь помощник ищет его в самих нормативных актах, скачанных с lex.uz.
+
+Посмотреть, что вообще проиндексировано:
+
+```bash
+make lex-list
+```
+
+```
+          59-son   155 band  Oliy taʼlim muassasalari talabalariga toʻlanadigan stipe…
+         344-son    90 band  … akademik taʼtil berish toʻgʻrisidagi nizom
+         578-son   673 band  … oʻqishga qabul qilish jarayonlari
+        3807-son   217 band  Oliy taʼlim toʻgʻrisidagi nizom
+    OʻRQ-637-son   659 band  Taʼlim toʻgʻrisida
+         376-son   165 band  … talabalarni turar joy bilan taʼminlash
+         605-son   146 band  … ijara toʻlovlarini qoplab berish
+         836-son   231 band  … yakuniy davlat attestatsiyasi
+        3781-son    41 band  … taʼlim yoʻnalishlari klassifikatori
+
+  9 hujjat, 2377 band
+```
+
+Какие пункты найдёт вопрос — **без модели**, чистый поиск:
+
+```bash
+make lex-ask Q="Talabalar turar joyi uchun to'lov qancha?"
+```
+
+```
+  376-son, 23-band  https://lex.uz/uz/docs/-6568679#-6571746
+  23. Talabalar turar joyi uchun oylik toʻlov miqdori va muddatlari oliy taʼlim
+  muassasasi tomonidan belgilanadi…
+```
+
+Ссылка открывает **этот пункт** на lex.uz, а не сто страниц постановления — цитату можно
+проверить за десять секунд.
+
+Теперь то же самое вопросом не по теме:
+
+```bash
+make lex-ask Q="Avtobus qachon keladi?"
+```
+
+```
+  hech narsa topilmadi -> operator
+```
+
+Защита здесь двойная, и вторая половина важнее первой.
+
+**Первая: поиск.** Пункт предлагается модели, только если делит с вопросом не меньше двух
+значащих слов, и хотя бы одно из них **редкое** — встречается не более чем в десятой
+части корпуса. Совпадение по «davom etadi» («длится») — это совпадение по грамматике, а
+не по смыслу.
+
+**Вторая: модель обязана назвать пункт.** Поиск не безупречен, и честнее это показать,
+чем прятать. Вопрос про футбол редкого слова не имеет, но «davom etadi» в корпусе из 2377
+пунктов встречается достаточно редко, чтобы пройти фильтр:
+
+```bash
+make lex-ask Q="Futbol o'yini necha daqiqa davom etadi?"
+```
+
+```
+  3807-son, 13-band  https://lex.uz/uz/docs/-8117474#-8120411
+  13. Bakalavriat taʼlim bosqichida oʻqish kamida uch yil davom etadi…
+```
+
+Пункт найден — про длительность бакалавриата. Но в звонке ответа не будет:
+
+```
+decision=clarify intent=out_of_scope
+```
+
+Модель получает выдержки и обязана вернуть номер использованного пункта. Если выдержки не
+отвечают на вопрос, она возвращает ноль — и ответ отбрасывается целиком, даже если текст
+написан. Ответ, который модель не может привязать к выданному ей пункту, до гражданина не
+доходит: такой звонок уходит человеку.
+
+В журнале звонка это видно так:
+
+```
+call …: answered from 376-son, 23-band for 'Talabalar turar joyi uchun to'lov qancha?'
+call …: decision=answer intent=law (1929 ms total)
+```
+
+В CRM у такой реплики в поле «источник» стоит номер пункта и ссылка на него.
+
+Обновить корпус (единственное место, которое ходит в интернет, и никогда во время
+звонка):
+
+```bash
+make lex-fetch
 ```
 
 ---
