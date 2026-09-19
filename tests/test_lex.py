@@ -9,6 +9,7 @@ second kind of failure.
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -286,3 +287,34 @@ async def test_a_broken_law_search_does_not_break_the_call():
         # The contract is that a law source never raises; LexLibrary honours it, and this
         # records that Brain relies on it rather than silently swallowing every error.
         await brain.decide("Akademik ta'til qanday olinadi?")
+
+
+class SlowReader:
+    """Classifies at once, but takes its time over the extracts — as the real model does
+    on a slow evening: three clauses of legal text are more to read than one line."""
+
+    def __init__(self, read_for_s: float) -> None:
+        self._read_for_s = read_for_s
+        self.calls = 0
+
+    async def complete_json(self, messages: list[ChatMessage], timeout_s: float) -> dict:
+        self.calls += 1
+        if self.calls == 1:
+            return {"intent": "unclear"}
+        await asyncio.sleep(self._read_for_s)
+        return {"clause": 1, "answer": "Toʻlov miqdorini oliy taʼlim muassasasi belgilaydi."}
+
+
+async def test_reading_the_law_gets_its_own_time():
+    """Seen live: the classifier's five seconds were applied to the reading too, the
+    reading took six, and a caller asking about a hall of residence was told the
+    assistant only answers questions about education. The wait is spoken through, so
+    the reading may take longer than the classification."""
+    brain = Brain(
+        SlowReader(read_for_s=0.3), faq={}, timeout_s=0.1, laws=Fixed(CLAUSE), law_timeout_s=2.0
+    )
+
+    decision = await brain.decide("Talabalar turar joyi uchun toʻlov qancha?")
+
+    assert decision.intent == "law", "the reading was cut off by the classifier's budget"
+    assert "344-son" in decision.source

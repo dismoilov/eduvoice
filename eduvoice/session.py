@@ -144,7 +144,9 @@ class CallSession:
         self._store = store
         # Hard budget for one turn (recognition + decision). Both stages have their own
         # timeout; this one also covers anything unexpected in between.
-        self._turn_budget_s = config.stt_timeout_s + config.llm_timeout_s + 3.0
+        self._turn_budget_s = (
+            config.stt_timeout_s + config.llm_timeout_s + config.law_timeout_s + 3.0
+        )
 
     @property
     def state(self) -> State:

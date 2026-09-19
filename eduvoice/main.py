@@ -99,6 +99,7 @@ def make_call_handler(faq: Faq, prompts: PromptLibrary, knowledge=None, store=No
                     timeout_s=settings.llm_timeout_s,
                     max_turns=settings.max_turns,
                     laws=laws,
+                    law_timeout_s=settings.law_timeout_s,
                 ),
                 prompts=prompts,
                 registry=registry,

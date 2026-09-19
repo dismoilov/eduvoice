@@ -50,6 +50,8 @@ Rules:
 - Prefer an FAQ entry when the question matches one.
 - If you are not sure of the answer, use intent=unclear. Never invent rules or numbers.
 - Any request to speak to a person means intent=operator.
+- Students' everyday matters are higher education too: stipends, contracts, halls of
+  residence, rent, academic leave, transfers, admission, exams, diplomas.
 - Write numbers and dates as words, do not use lists, brackets or links.
 """
 
@@ -96,6 +98,7 @@ class Brain:
         timeout_s: float = 5.0,
         max_turns: int = 8,
         laws: LawSource | None = None,
+        law_timeout_s: float | None = None,
     ) -> None:
         self._model = model
         if isinstance(faq, dict):
@@ -105,6 +108,9 @@ class Brain:
         self._timeout_s = timeout_s
         self._max_turns = max_turns
         self._laws = laws
+        # Reading three extracts takes the model longer than classifying one line, and
+        # this call is the last thing between the caller and "I did not understand".
+        self._law_timeout_s = law_timeout_s if law_timeout_s is not None else timeout_s
         self.unclear_streak = 0
 
     async def close(self) -> None:
@@ -210,8 +216,8 @@ class Brain:
         ]
         try:
             raw = await asyncio.wait_for(
-                self._model.complete_json(messages, timeout_s=self._timeout_s),
-                timeout=self._timeout_s,
+                self._model.complete_json(messages, timeout_s=self._law_timeout_s),
+                timeout=self._law_timeout_s,
             )
         except (LlmError, TimeoutError) as exc:
             # Not a transfer: the caller still has the ordinary "I did not understand"

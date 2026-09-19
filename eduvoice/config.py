@@ -114,6 +114,12 @@ class Settings:
     # understand you". LEX_ANSWERS=0 turns it off and the assistant behaves as before.
     lex_answers: bool = os.getenv("LEX_ANSWERS", "1") != "0"
     lex_clauses: int = _int("LEX_CLAUSES", 3)
+    # The model call that reads the clauses gets its own budget. It carries three
+    # extracts of legal text and is the last resort before "I did not understand"; on a
+    # slow evening it took over five seconds and the caller was told the assistant only
+    # answers questions about education — about a hall of residence. The wait is spoken
+    # through ("still checking"), so a longer budget costs patience, not silence.
+    law_timeout_s: float = _float("LAW_TIMEOUT_S", 12.0)
     # Writes the audio the bridge receives to logs/<call-id>.raw — raw 8 kHz PCM. For
     # working out why a particular line is not understood; off unless asked for.
     dump_audio: bool = os.getenv("EDUVOICE_DUMP_AUDIO", "") == "1"
