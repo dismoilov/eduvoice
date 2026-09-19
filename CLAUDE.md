@@ -269,6 +269,7 @@ asterisk -rx "channel originate Local/998901234567@eduvoice-demo/n extension qhe
 | `docs/OPERATIONS.md` | сервер, деплой, диагностика, приватность |
 | `docs/AUDIT.md` | независимый аудит кода и что исправлено |
 | `docs/VOICELAB-TASKS.md` | исторический: задание второму разработчику; полезное — разбор API VoiceLab против его документации |
-| `docs/pitch/` | питч-дек (PDF) и техническая защита (HTML, узбекский, офлайн) |
+| `EduVoice_pitch_deck_v4.pdf` | питч-дек для жюри, в корне репозитория |
+| `docs/pitch/` | техническая защита (HTML, узбекский, офлайн) |
 | `docs/xorazm_dolzarb_muammolar.pdf` | перечень задач хакатона |
 | `PLAN.md`, `TASKS.md` | исходный план и маршрут работ с отметками о проверке |

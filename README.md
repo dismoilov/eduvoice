@@ -155,7 +155,8 @@ make lex-ask Q="Yotoqxona qancha turadi?"        # какие пункты на�
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Сервер, деплой, диагностика, безопасность и приватность |
 | [docs/AUDIT.md](docs/AUDIT.md) | Независимый аудит кода и что по нему исправлено |
 | [docs/VOICELAB-TASKS.md](docs/VOICELAB-TASKS.md) | Разбор API VoiceLab: что обещает документация и что оказалось на деле |
-| [docs/pitch/](docs/pitch/) | Презентации: питч-дек (PDF) и техническая защита (HTML, узбекский, офлайн) |
+| [EduVoice_pitch_deck_v4.pdf](EduVoice_pitch_deck_v4.pdf) | **Питч-дек** — презентация для жюри |
+| [docs/pitch/](docs/pitch/) | Техническая защита (HTML, узбекский, открывается офлайн) |
 | [docs/xorazm_dolzarb_muammolar.pdf](docs/xorazm_dolzarb_muammolar.pdf) | Перечень задач хакатона (задачи №3 и №5) |
 | [CLAUDE.md](CLAUDE.md) | Сжатый контекст всего проекта — для нового человека или ИИ-ассистента |
 | [PLAN.md](PLAN.md) | Полный план проекта |
