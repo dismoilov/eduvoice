@@ -35,7 +35,7 @@ import time
 from collections import deque
 from typing import Literal
 
-from eduvoice.audio import FrameSplitter, StreamResampler, resample
+from eduvoice.audio import FrameSplitter, StreamResampler, from_g711, resample
 from eduvoice.audiosocket import KIND_HANGUP, KIND_UUID, AudioOut, encode, read_frames
 from eduvoice.brain import Brain, Decision
 from eduvoice.calllog import CallLog, call_as_dict
@@ -102,6 +102,7 @@ class CallSession:
         # and webrtcvad only accepts 10/20/30 ms frames — so normalise the stream here.
         self._incoming = FrameSplitter(SAMPLE_RATE_TELEPHONY)
         self._logged_chunk_size = False
+        self._incoming_format = "slin"
         self._speech = speech_detector or SpeechDetector(config)
         self._barge = barge_detector or BargeInDetector(config)
         # Frames heard while the bot is talking. On barge-in they are replayed into the
@@ -186,12 +187,34 @@ class CallSession:
     async def _on_incoming_audio(self, chunk: bytes) -> None:
         """Splits whatever Asterisk sent into exact 20 ms frames and feeds the detectors."""
         if not self._logged_chunk_size:
-            log.info("call %s: Asterisk sends %d-byte chunks", self.call_id, len(chunk))
+            record = self._registry.get(self.call_id)
+            self._incoming_format = (record.audio_format if record else "") or "slin"
+            log.info(
+                "call %s: Asterisk sends %d-byte chunks, format %s",
+                self.call_id,
+                len(chunk),
+                self._incoming_format,
+            )
             self._logged_chunk_size = True
+        if self._incoming_format in ("ulaw", "alaw"):
+            chunk = from_g711(chunk, alaw=self._incoming_format == "alaw")
+        if self._cfg.dump_audio:
+            # Exactly what came off the line, for working out why a particular telephone
+            # is not understood: raw 8 kHz mono PCM, playable with `sox -r 8000 -e signed
+            # -b 16 -c 1 <file>.raw out.wav`.
+            with contextlib.suppress(OSError):
+                self._cfg.call_log_dir.mkdir(parents=True, exist_ok=True)
+                with (self._cfg.call_log_dir / f"{self.call_id or 'unknown'}.raw").open("ab") as f:
+                    f.write(chunk)
         for frame in self._incoming.push(chunk):
             await self._on_audio(frame)
 
     async def _on_audio(self, frame: bytes) -> None:
+        if self._state == "greeting" and not self._cfg.interruptible_greeting:
+            # The greeting says what this service is and how to use it, and a caller who
+            # has never met it needs to hear it through. In a noisy room it was being cut
+            # off within half a second by the room itself, every single call.
+            return
         if self._state in ("greeting", "speaking"):
             self._recent.append(frame)
             if self._barge.push(frame):

@@ -16,6 +16,39 @@ FRAME_MS = 20
 BYTES_PER_SAMPLE = 2
 
 
+def _g711_table(alaw: bool) -> np.ndarray:
+    """Lookup from one G.711 byte to a signed 16-bit sample."""
+    values = np.arange(256, dtype=np.int32)
+    if alaw:
+        code = values ^ 0x55
+        mantissa, exponent = code & 0x0F, (code & 0x70) >> 4
+        magnitude = np.where(
+            exponent == 0, (mantissa << 4) + 8, ((mantissa << 4) + 0x108) << (exponent - 1)
+        )
+        return np.where(code & 0x80, magnitude, -magnitude).astype(np.int16)
+    code = ~values & 0xFF
+    mantissa, exponent = code & 0x0F, (code & 0x70) >> 4
+    magnitude = (((mantissa << 3) + 0x84) << exponent) - 0x84
+    return np.where(code & 0x80, -magnitude, magnitude).astype(np.int16)
+
+
+ULAW_TO_LINEAR = _g711_table(alaw=False)
+ALAW_TO_LINEAR = _g711_table(alaw=True)
+
+
+def from_g711(data: bytes, alaw: bool = False) -> bytes:
+    """One byte per sample in, two bytes per sample out.
+
+    Asterisk hands the AudioSocket channel whatever format the call negotiated, and a real
+    telephone negotiates G.711 — one byte per sample. Read as 16-bit audio that is a
+    constant full-scale roar: the voice detector hears speech without pause, no phrase
+    ever ends, and nothing is ever recognised. Test calls made with `Local/` channels are
+    linear, which is why they never showed it.
+    """
+    table = ALAW_TO_LINEAR if alaw else ULAW_TO_LINEAR
+    return table[np.frombuffer(data, dtype=np.uint8)].tobytes()
+
+
 def frame_bytes(sample_rate: int, frame_ms: int = FRAME_MS) -> int:
     """Size of one frame in bytes: 320 for 8 kHz / 20 ms."""
     samples = sample_rate * frame_ms // 1000

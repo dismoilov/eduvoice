@@ -108,25 +108,49 @@ async def test_a_call_asking_for_an_operator_is_handed_to_a_human(bridge):
     await call_writer.drain()
 
     heard_hangup = False
+    last_audio_at = 0.0
 
     async def talk() -> None:
-        """Stay quiet while the bot greets, then speak, then wait for the answer."""
-        for frames, chunk in ((160, QUIET), (40, SPEECH), (60, QUIET), (250, QUIET)):
-            for _ in range(frames):
-                call_writer.write(encode(KIND_AUDIO, chunk))
+        """Hear the greeting out, then speak, then wait for the answer.
+
+        Waiting for the line to go quiet rather than counting frames: the greeting cannot
+        be interrupted any more, and how long it lasts depends on its text. This used to
+        pass by accident — webrtcvad calls even pure silence speech, so the frames sent
+        while the bot greeted cut the greeting short and the rest of the test fitted.
+        """
+
+        async def quiet_for(seconds: float) -> None:
+            while True:
+                call_writer.write(encode(KIND_AUDIO, QUIET))
                 await call_writer.drain()
                 await asyncio.sleep(0.02)
                 if heard_hangup:
                     return
+                if last_audio_at and asyncio.get_running_loop().time() - last_audio_at > seconds:
+                    return
+
+        await quiet_for(0.4)  # the greeting has finished playing
+        for _ in range(40):
+            call_writer.write(encode(KIND_AUDIO, SPEECH))
+            await call_writer.drain()
+            await asyncio.sleep(0.02)
+        for _ in range(310):
+            call_writer.write(encode(KIND_AUDIO, QUIET))
+            await call_writer.drain()
+            await asyncio.sleep(0.02)
+            if heard_hangup:
+                return
 
     async def listen() -> None:
-        nonlocal heard_hangup
+        nonlocal heard_hangup, last_audio_at
         while True:
             header = await call_reader.readexactly(3)
             kind = header[0]
             length = int.from_bytes(header[1:3], "big")
             if length:
                 await call_reader.readexactly(length)
+            if kind == KIND_AUDIO:
+                last_audio_at = asyncio.get_running_loop().time()
             if kind == KIND_HANGUP:
                 heard_hangup = True
                 return

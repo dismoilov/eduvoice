@@ -14,6 +14,8 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Protocol
 
+import numpy as np
+
 from eduvoice.audio import FRAME_MS, duration_ms, frame_bytes
 from eduvoice.config import Settings
 from eduvoice.config import settings as default_settings
@@ -57,6 +59,43 @@ class Utterance:
         return duration_ms(self.pcm8k, SAMPLE_RATE_TELEPHONY)
 
 
+class LoudnessGate:
+    """Is this frame louder than the room the caller is standing in?
+
+    `webrtcvad` answers "is this speech-shaped", and in a hall with music and a crowd it
+    answers yes to every single frame — measured on a real call from the venue: 100 % of
+    frames called speech at the strictest setting, background steady at RMS 3400 with no
+    quiet moment at all. A phrase can then never end, because ending one needs silence.
+
+    A handset is centimetres from the mouth, so the caller's own voice arrives far louder
+    than the room. That difference is what this measures. The floor follows the room down
+    at once and climbs back slowly, so a lull does not raise the bar.
+    """
+
+    def __init__(self, margin: float, window_frames: int = 100, quietest: float = 30.0) -> None:
+        self._margin = margin
+        self._recent = deque[float](maxlen=window_frames)
+        self._quietest = quietest
+
+    @staticmethod
+    def level(frame: bytes) -> float:
+        samples = np.frombuffer(frame, dtype=np.int16).astype(np.float32)
+        return float(np.sqrt(np.mean(samples * samples))) if samples.size else 0.0
+
+    def __call__(self, frame: bytes) -> bool:
+        """The room is the quietest thing heard in the last couple of seconds.
+
+        Tracked as a minimum over a window rather than a slowly drifting average: walking
+        into a hall changes the background in one step, and an average takes a quarter of
+        a minute to catch up — the whole call, in other words. Speech has dips between
+        syllables, so even continuous talking leaves the window near the room level.
+        """
+        rms = self.level(frame)
+        self._recent.append(rms)
+        floor = max(min(self._recent), self._quietest)
+        return rms >= floor * self._margin
+
+
 class SpeechDetector:
     """Collects one utterance: pre-roll + speech, ends after a fixed silence."""
 
@@ -64,7 +103,19 @@ class SpeechDetector:
         self, config: Settings | None = None, speech_test: SpeechTest | None = None
     ) -> None:
         cfg = config or default_settings
-        self._is_speech = speech_test or WebrtcSpeechTest(cfg.vad_aggressiveness)
+        vad = speech_test or WebrtcSpeechTest(cfg.vad_aggressiveness)
+        if speech_test is None and cfg.loudness_margin > 1.0:
+            gate = LoudnessGate(cfg.loudness_margin)
+
+            def heard(frame: bytes) -> bool:
+                # The gate runs on every frame, whatever the detector thinks, or the room
+                # would only be measured while somebody was already talking.
+                loud_enough = gate(frame)
+                return loud_enough and vad(frame)
+
+            self._is_speech: SpeechTest = heard
+        else:
+            self._is_speech = vad
         self._start_needed = cfg.speech_start_frames
         self._start_window = deque[bool](maxlen=cfg.speech_start_window)
         self._silence_to_end = cfg.silence_end_frames

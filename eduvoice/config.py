@@ -49,8 +49,18 @@ class Settings:
     barge_in_guard_ms: int = _int(
         "BARGE_IN_GUARD_MS", 500
     )  # ignore echo right after we start talking
+    # How much louder than the room a frame must be to count as the caller talking.
+    # 1.0 turns the test off and trusts the voice detector alone, which is right on a
+    # quiet line and useless in a hall. Measured at the venue: room RMS ~3400.
+    loudness_margin: float = _float("LOUDNESS_MARGIN", 1.8)
+    # Whether the caller may talk over the greeting. Off: a first-time caller must hear
+    # what the service is, and a noisy room interrupts it before they hear anything.
+    interruptible_greeting: bool = os.getenv("INTERRUPTIBLE_GREETING", "") == "1"
     preroll_ms: int = _int("PREROLL_MS", 300)  # audio kept before speech starts
-    max_utterance_s: float = _float("MAX_UTTERANCE_S", 30.0)  # VoiceLab commit limit is 35 s
+    # A phrase this long is sent for recognition even if the noise never lets it end.
+    # Better a recognition that fails — and, after three, a person — than a caller
+    # talking into a system that is still waiting for a silence that will not come.
+    max_utterance_s: float = _float("MAX_UTTERANCE_S", 12.0)
 
     # --- dialogue timing --------------------------------------------------
     silence_reprompt_s: float = _float("SILENCE_REPROMPT_S", 6.0)
@@ -60,6 +70,9 @@ class Settings:
     tts_first_chunk_timeout_s: float = _float("TTS_FIRST_CHUNK_TIMEOUT_S", 3.0)
     max_turns: int = _int("MAX_TURNS", 8)
     max_call_s: float = _float("MAX_CALL_S", 360.0)
+    # Writes the audio the bridge receives to logs/<call-id>.raw — raw 8 kHz PCM. For
+    # working out why a particular line is not understood; off unless asked for.
+    dump_audio: bool = os.getenv("EDUVOICE_DUMP_AUDIO", "") == "1"
 
     # --- files ------------------------------------------------------------
     audio_dir: Path = field(

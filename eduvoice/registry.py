@@ -46,6 +46,8 @@ class CallRecord:
     caller: str = ""
     started_at: float = field(default_factory=time.time)
     connected: bool = False
+    # What Asterisk negotiated for this call: "ulaw", "alaw", "slin"…
+    audio_format: str = ""
     next_action: NextAction = DEFAULT_NEXT
     turns: list[Turn] = field(default_factory=list)
     summary: str = ""

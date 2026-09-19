@@ -159,3 +159,48 @@ def test_nobody_can_interrupt_a_phrase_that_has_not_been_played_yet():
     detector.playback_audible()  # the first sound reaches the caller
     assert all(detector.push(SPEECH) is False for _ in range(5)), "the guard did not restart"
     assert any(detector.push(SPEECH) for _ in range(10)), "a real interruption was ignored"
+
+
+def test_a_hall_full_of_people_is_not_a_person_speaking():
+    """Measured at the venue: background steady at RMS ~3400, and `webrtcvad` called
+    100 % of frames speech at its strictest setting — it even calls pure digital silence
+    speech. A phrase can then never end, because ending one needs silence, so the caller
+    talked for twenty seconds and not one word was ever sent for recognition.
+
+    A handset sits centimetres from the mouth, so the caller's own voice arrives far
+    louder than the room. That difference is what this measures.
+    """
+    import numpy as np
+
+    from eduvoice.vad import LoudnessGate
+
+    def noise(rms: float) -> bytes:
+        rng = np.random.default_rng(7)
+        return (rng.standard_normal(160) * rms).astype(np.int16).tobytes()
+
+    hall, voice = noise(3400), noise(9000)
+    gate = LoudnessGate(margin=1.8)
+
+    for _ in range(100):  # the room, before anyone says anything
+        assert gate(hall) is False, "the hall was mistaken for the caller"
+    assert gate(voice) is True, "the caller was not heard over the hall"
+    for _ in range(50):
+        gate(hall)
+    assert gate(hall) is False, "the hall crept back in once it had been heard over"
+
+
+def test_the_loudness_gate_still_hears_someone_on_a_quiet_line():
+    """The whole point is to work in both places: a silent office line must not need
+    shouting."""
+    import numpy as np
+
+    from eduvoice.vad import LoudnessGate
+
+    rng = np.random.default_rng(3)
+    quiet_room = (rng.standard_normal(160) * 40).astype(np.int16).tobytes()
+    ordinary_voice = (rng.standard_normal(160) * 1200).astype(np.int16).tobytes()
+    gate = LoudnessGate(margin=1.8)
+
+    for _ in range(100):
+        gate(quiet_room)
+    assert gate(ordinary_voice) is True, "an ordinary voice on a quiet line was ignored"

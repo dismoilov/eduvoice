@@ -3,7 +3,7 @@
 Kept dependency-free on purpose: the server runs on Sangoma Linux 7 where new wheels
 often do not build, and the whole surface is three endpoints.
 
-    POST /calls/{uuid}/start   caller=998901234567     -> "ok"
+    POST /calls/{uuid}/start   caller=998901234567&format=ulaw  -> "ok"
     GET  /calls/{uuid}/next                            -> "operator" | "hangup"
     GET  /calls/{uuid}/summary                         -> JSON
     GET  /health                                       -> JSON
@@ -85,8 +85,14 @@ class ControlApi:
             if method == "POST" and action == "start":
                 form = parse_qs(body)
                 caller = form.get("caller", [""])[0]
-                self._registry.start(call_id, caller=caller)
-                log.info("call %s announced by dialplan (caller=%s)", call_id, caller or "unknown")
+                started = self._registry.start(call_id, caller=caller)
+                started.audio_format = form.get("format", [""])[0].strip().lower()
+                log.info(
+                    "call %s announced by dialplan (caller=%s, format=%s)",
+                    call_id,
+                    caller or "unknown",
+                    started.audio_format or "unknown",
+                )
                 return _response("200 OK", "ok")
 
             if method == "GET" and action == "next":
