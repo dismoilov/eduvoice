@@ -75,7 +75,9 @@ def say(args: argparse.Namespace) -> int:
 
 def ivr(args: argparse.Namespace) -> int:
     """The menu Asterisk plays before the assistant picks up."""
-    prompts = PromptLibrary.load(settings.content_dir, settings.audio_dir)
+    prompts = PromptLibrary.load(
+        settings.content_dir, settings.audio_dir, settings.voicelab_voice_uz
+    )
     text = prompts.text("ivr_menu")
     print(f"  matn: {text}")
     _write_telephony_wav(Path(args.out), asyncio.run(_synthesise(text)))
@@ -90,7 +92,9 @@ async def _prewarm(dry_run: bool = False) -> tuple[int, int, int]:
     """
     from store.knowledge import PublishedKnowledge
 
-    prompts = PromptLibrary.load(settings.content_dir, settings.audio_dir)
+    prompts = PromptLibrary.load(
+        settings.content_dir, settings.audio_dir, settings.voicelab_voice_uz
+    )
     answers = PublishedKnowledge(settings.db_path).entries()
     texts = [prompts.text(key) for key in prompts.ids()]
     texts += [str(entry["answer"]) for entry in answers.values()]

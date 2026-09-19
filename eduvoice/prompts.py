@@ -26,20 +26,25 @@ log = logging.getLogger("eduvoice.prompts")
 class PromptLibrary:
     """Texts from content/prompts.yaml plus their cached audio."""
 
-    def __init__(self, texts: dict[str, str], cache_dir: Path | None = None) -> None:
+    def __init__(
+        self, texts: dict[str, str], cache_dir: Path | None = None, voice: str = ""
+    ) -> None:
         self._texts = texts
         self._cache_dir = cache_dir
+        self._voice = voice
         self._audio: dict[str, bytes] = {}
         # One lock per phrase: two calls starting at the same second must not synthesise
         # the same greeting twice.
         self._locks: dict[str, asyncio.Lock] = {}
 
     @classmethod
-    def load(cls, content_dir: Path, audio_dir: Path | None = None) -> PromptLibrary:
+    def load(
+        cls, content_dir: Path, audio_dir: Path | None = None, voice: str = ""
+    ) -> PromptLibrary:
         path = content_dir / "prompts.yaml"
         texts = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         cache = audio_dir / "prompts" if audio_dir else None
-        return cls({k: str(v).strip() for k, v in texts.items()}, cache)
+        return cls({k: str(v).strip() for k, v in texts.items()}, cache, voice)
 
     def ids(self) -> list[str]:
         return list(self._texts)
@@ -83,16 +88,21 @@ class PromptLibrary:
         return ready
 
     def _cached_path(self, prompt_id: str) -> Path | None:
-        """The file name carries a fingerprint of the text, not just the phrase id.
+        """The file name carries a fingerprint of the text and the voice, not just the id.
 
         Keyed by id alone, an edited phrase kept playing in the caller's ear forever: the
         old file still matched, so nothing was ever re-synthesised, while the CRM showed
-        the new wording next to audio of the old one. A missed file costs nothing — the
-        synthesis layer beneath keeps its own cache, keyed by the same text.
+        the new wording next to audio of the old one. The voice belongs in the same
+        fingerprint for the same reason — changing `VOICELAB_VOICE_UZ` would otherwise
+        leave every service phrase in the previous voice, and only the answers would
+        change, so the assistant would greet the caller in one voice and answer in
+        another. A missed file costs nothing: the synthesis layer beneath keeps its own
+        cache, keyed by text, voice and speed together.
         """
         if self._cache_dir is None:
             return None
-        fingerprint = hashlib.sha256(self.text(prompt_id).encode()).hexdigest()[:8]
+        key = f"{self.text(prompt_id)}|{self._voice}"
+        fingerprint = hashlib.sha256(key.encode()).hexdigest()[:8]
         return self._cache_dir / f"{prompt_id}-{fingerprint}.pcm"
 
     def _from_disk(self, prompt_id: str) -> bytes | None:

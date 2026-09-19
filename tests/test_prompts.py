@@ -80,3 +80,23 @@ async def test_editing_a_phrase_changes_what_the_caller_hears(tmp_path):
     assert len(list(tmp_path.glob("*.pcm"))) == 2
     again = await PromptLibrary({"greeting": "eski salom"}, tmp_path).audio("greeting", tts)
     assert again == before and len(tts.spoken) == 2, "reverting must not cost another synthesis"
+
+
+async def test_changing_the_voice_re_synthesises_the_service_phrases(tmp_path):
+    """Changing VOICELAB_VOICE_UZ must change the greeting too, not only the answers.
+
+    The answers are synthesised per call and their cache already knows the voice; the
+    service phrases are cached here, by text. Keyed by text alone, switching the voice
+    left every fixed phrase in the old one — so the assistant greeted the caller in one
+    voice, answered in another, and said goodbye in the first again. `make deploy` keeps
+    the audio directory on purpose, so this would have survived every redeploy.
+    """
+    tts = FakeTextToSpeech(first_chunk_ms=1, ms_per_char=1)
+    texts = {"greeting": "assalomu alaykum"}
+
+    old = await PromptLibrary(texts, tmp_path, voice="voice_OLD").audio("greeting", tts)
+    await PromptLibrary(texts, tmp_path, voice="voice_NEW").audio("greeting", tts)
+
+    assert tts.spoken == ["assalomu alaykum"] * 2, "the new voice was served from the old file"
+    back = await PromptLibrary(texts, tmp_path, voice="voice_OLD").audio("greeting", tts)
+    assert back == old and len(tts.spoken) == 2, "going back must not cost another synthesis"
