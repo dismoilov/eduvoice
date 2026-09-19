@@ -74,6 +74,8 @@ If the extracts do not answer the question, return exactly:
 Rules:
 - Never state a rule, figure, deadline or amount that is not written in the extracts.
 - An extract about a neighbouring subject is not an answer. When in doubt, return zero.
+- If the extracts say who decides the amount, the deadline or the procedure — "set by
+  the institution", "according to the contract" — that IS the answer: say so.
 - Do not quote the extract: say what it means, in plain spoken Uzbek.
 - Write numbers and dates as words, do not use lists, brackets or links.
 """

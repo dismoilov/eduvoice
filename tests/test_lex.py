@@ -45,12 +45,19 @@ yuborilgan talabalarga akademik taʼtil berilmaydi va qayta tiklanadi.</div></di
 bir yilgacha davom etadi va uzaytirilishi mumkin emas.</div></div>
 <div class="ACT_TEXT lx_elem"><div name="-106" id="-106">9. Taʼlim jarayoni oʻquv
 yili davomida davom etadi va dekan buyrugʻi bilan rasmiylashtiriladi.</div></div>
-<div class="ACT_TEXT lx_elem"><div name="-107" id="-107">10. Kontrakt toʻlovi
+<div class="ACT_TEXT lx_elem"><div name="-107" id="-107">10. Kontrakt summasi
 boʻlib toʻlanadi va muddati shartnomada davom etadi.</div></div>
 <div class="ACT_TEXT lx_elem"><div name="-108" id="-108">11. Talaba arizasi dekanat
 tomonidan koʻrib chiqiladi va javob beriladi.</div></div>
 <div class="ACT_TEXT lx_elem"><div name="-109" id="-109">12. Talabalar turar joyiga
 joylashish tartibi alohida hujjat bilan belgilanadi.</div></div>
+<div class="ACT_TEXT lx_elem"><div name="-110" id="-110">13. Talabalar turar joyiga
+joylashish uchun ariza komissiyaga avgust oyigacha topshiriladi.</div></div>
+<div class="ACT_TEXT lx_elem"><div name="-111" id="-111">14. Talabalar turar joyida
+tartib-qoidalar oliy taʼlim muassasasi tomonidan tasdiqlanadi.</div></div>
+<div class="ACT_TEXT lx_elem"><div name="-112" id="-112">15. Talabalar turar joyi uchun
+oylik toʻlov miqdori va muddatlari oliy taʼlim muassasasi tomonidan
+belgilanadi.</div></div>
 </body></html>
 """
 
@@ -132,14 +139,14 @@ def test_the_clauses_that_only_share_grammar_are_left_out_of_a_real_answer():
     """The dangerous case is not a question that finds nothing — it is a good question
     whose neighbours come along for the ride.
 
-    "Kontrakt toʻlovi qancha davom etadi?" genuinely matches the clause about contract
+    "Kontrakt summasi qancha davom etadi?" genuinely matches the clause about contract
     payment. It also matches two clauses that merely contain "davom etadi", one of them
     about academic leave. Handing all three to the model invites it to answer about the
     wrong one, and every extract it is given is one more thing it may quote.
     """
     db = corpus()
 
-    found = search(db, "Kontrakt to'lovi qancha davom etadi?")
+    found = search(db, "Kontrakt summasi qancha davom etadi?")
 
     assert [clause.band for clause in found] == ["10"], "clauses matching only grammar came too"
 
@@ -380,3 +387,26 @@ async def test_without_a_law_corpus_the_model_may_still_answer():
 
     assert decision.action == "answer"
     assert "toʻrt yil" in decision.text
+
+
+def test_how_much_it_costs_finds_the_clause_on_payment_not_the_ones_on_allocation():
+    """Live, three times in a row: "Talabalar turar joyi uchun qancha turadi?" — how
+    much does a hall of residence cost. The decree never says "turadi" and "qancha" is
+    in every second question, so the clause on the monthly payment lost to three clauses
+    on allocation that share "talabalar turar joyi" with it, and the model — rightly —
+    refused to answer a question about cost from a clause about a committee."""
+    db = corpus()
+
+    found = search(db, "Talabalar turar joyi uchun qancha turadi?")
+
+    assert found, "nothing found for a question about cost"
+    assert found[0].band == "15", f"clause {found[0].band} outranked the one on payment"
+
+
+def test_a_dormitory_is_a_hall_of_residence():
+    """Callers say "yotoqxona"; the decree says "talabalar turar joyi"."""
+    db = corpus()
+
+    found = search(db, "Yotoqxona uchun to'lov qancha?")
+
+    assert found and found[0].band == "15", "the caller's word for it was not understood"

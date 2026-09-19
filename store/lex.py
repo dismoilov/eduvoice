@@ -48,6 +48,28 @@ _STOPWORDS = """
     """
 STOPWORDS = frozenset(_STOPWORDS.split())
 
+# What a caller says against what a decree writes. "How much does it cost" — "qancha
+# turadi" — contains no word a decree about payment uses: "qancha" is in every second
+# question and "turadi" is not in the law at all, so the clause on the cost of a hall
+# of residence lost to three clauses about allocating one, and the caller was told the
+# assistant did not understand. Each entry adds the decree's own words for the idea.
+# Measured on live calls from the venue, 19.09; keep it short and keep it about ideas.
+# "Qancha" itself is not here: it is "how much" but also "how long" and "how many",
+# and expanding it made "how long does this take" find a clause on contract payment.
+EXPANSIONS: dict[str, tuple[str, ...]] = {
+    "narx": ("tolov", "miqdor"),  # price -> payment, amount
+    "narxi": ("tolov", "miqdor"),
+    "turadi": ("tolov", "miqdor"),  # (it) costs
+    "summa": ("tolov", "miqdor"),
+    "pul": ("tolov", "miqdor"),
+    "pulni": ("tolov", "miqdor"),
+    "yotoqxona": ("turar", "joyi"),  # dormitory -> "talabalar turar joyi"
+    "yotoqxonaga": ("turar", "joyi"),
+    "yotoqxonada": ("turar", "joyi"),
+    "qachon": ("muddat",),  # when -> deadline, term
+    "qachongacha": ("muddat",),
+}
+
 # How much of a word is treated as its stem. Uzbek glues its endings on, and the caller
 # uses a different one from the decree: they ask about "taʼtilda" where the decree says
 # "taʼtil", about "magistraturaga" where it says "magistratura". A prefix search only
@@ -84,9 +106,14 @@ def fold(text: str) -> str:
 
 
 def terms(question: str) -> list[str]:
-    """The stems of a question's meaningful words, in the spelling the index uses."""
+    """The stems of a question's meaningful words, in the spelling the index uses.
+
+    Plus the decree's words for ideas the caller put differently — see `EXPANSIONS`.
+    """
     words = re.findall(r"[\w]+", fold(question), flags=re.UNICODE)
     stems = [w[:STEM_CHARS] for w in words if len(w) >= 4 and w not in STOPWORDS]
+    for word in words:
+        stems.extend(extra[:STEM_CHARS] for extra in EXPANSIONS.get(word, ()))
     return list(dict.fromkeys(stems))  # in order, without repeats
 
 
