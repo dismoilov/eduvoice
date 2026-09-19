@@ -21,7 +21,8 @@ deploy: check       ## ship the code to the server and restart the bridge
 	rsync -az --delete -e '$(SSH)' \
 		--exclude '.venv' --exclude '__pycache__' --exclude '.pytest_cache' \
 		--exclude '.ruff_cache' --exclude '.git' --exclude 'logs' --exclude '.env' \
-		--exclude 'audio' \
+		--exclude 'audio' --exclude '.mypy_cache' --exclude '.DS_Store' \
+		--exclude '.coverage*' --exclude 'htmlcov' --exclude 'data' \
 		./ $(SERVER):$(REMOTE)/
 	$(SSH) $(SERVER) 'install -m 644 $(REMOTE)/deploy/eduvoice-bridge.service $(REMOTE)/deploy/eduvoice-crm.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable eduvoice-bridge eduvoice-crm >/dev/null 2>&1 || true'
 	$(SSH) $(SERVER) 'cd $(REMOTE) && UV_PYTHON_INSTALL_DIR=/opt/eduvoice/.python UV_CACHE_DIR=/opt/eduvoice/.cache/uv /usr/local/bin/uv sync --frozen --no-dev'
