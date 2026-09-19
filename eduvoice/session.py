@@ -103,11 +103,16 @@ class CallSession:
         self._incoming = FrameSplitter(SAMPLE_RATE_TELEPHONY)
         self._logged_chunk_size = False
         self._incoming_format = "slin"
+        self._format_refused = False
         self._speech = speech_detector or SpeechDetector(config)
         self._barge = barge_detector or BargeInDetector(config)
         # Frames heard while the bot is talking. On barge-in they are replayed into the
         # voice detector, otherwise the first word of the interruption would be lost.
-        self._recent = deque[bytes](maxlen=max(1, config.barge_in_window))
+        # Long enough to hold a whole question asked while we were still talking. People
+        # talk over telephone systems constantly, and a caller in a hall cannot tell when
+        # the assistant has finished — their question used to be discarded frame by frame
+        # and they were then told, in a clear voice, that they had not been understood.
+        self._recent = deque[bytes](maxlen=max(1, int(config.carry_over_s * 1000 / 20)))
         self._state: State = "greeting"
         self._speak_task: asyncio.Task[None] | None = None
         self._think_task: asyncio.Task[None] | None = None
@@ -198,6 +203,20 @@ class CallSession:
             self._logged_chunk_size = True
         if self._incoming_format in ("ulaw", "alaw"):
             chunk = from_g711(chunk, alaw=self._incoming_format == "alaw")
+        elif self._incoming_format not in ("slin", "") and not self._format_refused:
+            # G.722, opus, gsm… — anything the bridge cannot decode would be heard as a
+            # roar and never recognised. Say so loudly and give the caller a person now,
+            # rather than a confident "I did not understand you" after twenty seconds.
+            self._format_refused = True
+            log.error(
+                "call %s: audio arrives as %s, which the bridge cannot decode; the endpoint"
+                " must be limited to ulaw/alaw (asterisk/pjsip.endpoint_custom_post.conf)",
+                self.call_id,
+                self._incoming_format,
+            )
+            self._note_spoken("transfer")
+            await self._finish("operator", "transfer")
+            return
         if self._cfg.dump_audio:
             # Exactly what came off the line, for working out why a particular telephone
             # is not understood: raw 8 kHz mono PCM, playable with `sox -r 8000 -e signed
@@ -213,18 +232,18 @@ class CallSession:
         if self._state == "greeting" and not self._cfg.interruptible_greeting:
             # The greeting says what this service is and how to use it, and a caller who
             # has never met it needs to hear it through. In a noisy room it was being cut
-            # off within half a second by the room itself, every single call.
+            # off within half a second by the room itself, every single call. What the
+            # caller says meanwhile is still kept — see `_listen`.
+            self._recent.append(frame)
             return
         if self._state in ("greeting", "speaking"):
             self._recent.append(frame)
             if self._barge.push(frame):
                 log.info("call %s: barge-in", self.call_id)
                 await self._stop_speaking()
+                # `_listen` replays what the caller already said over us, so recognition
+                # gets the whole phrase and not just its tail.
                 self._listen()
-                # Replay what the caller already said over us, so recognition gets the
-                # whole phrase and not just its tail.
-                self._speech.seed(list(self._recent))
-                self._recent.clear()
             return
 
         if self._state == "thinking":
@@ -267,8 +286,16 @@ class CallSession:
     # ------------------------------------------------------------- talking
 
     def _listen(self) -> None:
+        """Back to the caller — with whatever they said while we were talking.
+
+        Without this a question asked over the assistant was thrown away, and the caller
+        heard "I did not understand you" in reply to words we had deliberately discarded.
+        """
         self._state = "listening"
         self._speech.reset()
+        if self._recent:
+            self._speech.seed(list(self._recent))
+            self._recent.clear()
 
     def _speak_prompt(self, prompt_id: str) -> None:
         """Play a service phrase (cached audio, no synthesis delay)."""

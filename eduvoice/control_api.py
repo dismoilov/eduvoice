@@ -86,7 +86,9 @@ class ControlApi:
                 form = parse_qs(body)
                 caller = form.get("caller", [""])[0]
                 started = self._registry.start(call_id, caller=caller)
-                started.audio_format = form.get("format", [""])[0].strip().lower()
+                # audionativeformat arrives as "(ulaw)" or "(ulaw|alaw)": the first one
+                raw_format = form.get("format", [""])[0].strip().lower()
+                started.audio_format = raw_format.strip("()").split("|")[0].strip()
                 log.info(
                     "call %s announced by dialplan (caller=%s, format=%s)",
                     call_id,

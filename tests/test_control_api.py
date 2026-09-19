@@ -171,3 +171,15 @@ def test_calls_that_never_reached_the_bridge_are_eventually_forgotten():
     assert registry.get("fresh-99") is not None, "a just-announced call is still expected"
     assert registry.get("stale-0") is None, "an abandoned announcement was kept for ever"
     assert len(registry._calls) <= 120, f"{len(registry._calls)} records retained"
+
+
+def test_the_native_format_arrives_in_asterisk_s_own_notation():
+    """`CHANNEL(audionativeformat)` answers "(ulaw)" or "(ulaw|alaw)", brackets and all."""
+    from eduvoice.registry import CallRegistry
+
+    registry = CallRegistry()
+    for sent, expected in (("(ulaw)", "ulaw"), ("(ulaw|alaw)", "ulaw"), ("slin", "slin"), ("", "")):
+        started = registry.start(f"fmt-{sent}")
+        raw_format = sent.strip().lower()
+        started.audio_format = raw_format.strip("()").split("|")[0].strip()
+        assert started.audio_format == expected, f"{sent!r} parsed as {started.audio_format!r}"

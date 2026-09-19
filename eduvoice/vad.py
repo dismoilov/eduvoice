@@ -85,15 +85,27 @@ class LoudnessGate:
     def __call__(self, frame: bytes) -> bool:
         """The room is the quietest thing heard in the last couple of seconds.
 
-        Tracked as a minimum over a window rather than a slowly drifting average: walking
-        into a hall changes the background in one step, and an average takes a quarter of
-        a minute to catch up — the whole call, in other words. Speech has dips between
+        Tracked over a short window rather than as a slowly drifting average: walking into
+        a hall changes the background in one step, and an average takes a quarter of a
+        minute to catch up — the whole call, in other words. Speech has dips between
         syllables, so even continuous talking leaves the window near the room level.
         """
         rms = self.level(frame)
         self._recent.append(rms)
-        floor = max(min(self._recent), self._quietest)
+        floor = max(self._floor_of(self._recent), self._quietest)
         return rms >= floor * self._margin
+
+    @staticmethod
+    def _floor_of(levels: deque[float]) -> float:
+        """The tenth percentile, not the minimum.
+
+        The first frame of a call arrives before any room audio does — measured at 149
+        against a hall sitting at 4000 — and a plain minimum let that one frame set the
+        bar for the next two seconds, so the room cleared it easily and cut the answer
+        off half a second in.
+        """
+        ordered = sorted(levels)
+        return ordered[len(ordered) // 10]
 
 
 class SpeechDetector:
@@ -189,14 +201,27 @@ class SpeechDetector:
 class BargeInDetector:
     """Says whether the caller is talking over the bot.
 
-    A short guard after playback starts ignores line echo of our own voice.
+    A short guard after playback starts ignores line echo of our own voice, and the same
+    loudness test the phrase detector uses keeps a room from interrupting us: without it
+    the assistant heard the question, began to answer, and was cut off by the hall within
+    a second — every single time, so the caller never heard a word of the answer.
     """
 
     def __init__(
         self, config: Settings | None = None, speech_test: SpeechTest | None = None
     ) -> None:
         cfg = config or default_settings
-        self._is_speech = speech_test or WebrtcSpeechTest(cfg.vad_aggressiveness)
+        vad = speech_test or WebrtcSpeechTest(cfg.vad_aggressiveness)
+        if speech_test is None and cfg.barge_in_margin > 1.0:
+            gate = LoudnessGate(cfg.barge_in_margin)
+
+            def heard(frame: bytes) -> bool:
+                loud_enough = gate(frame)
+                return loud_enough and vad(frame)
+
+            self._is_speech: SpeechTest = heard
+        else:
+            self._is_speech = vad
         self._needed = cfg.barge_in_frames
         self._window = deque[bool](maxlen=cfg.barge_in_window)
         self._guard_frames = int(cfg.barge_in_guard_ms / FRAME_MS)

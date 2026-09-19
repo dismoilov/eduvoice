@@ -52,11 +52,21 @@ class Settings:
     # How much louder than the room a frame must be to count as the caller talking.
     # 1.0 turns the test off and trusts the voice detector alone, which is right on a
     # quiet line and useless in a hall. Measured at the venue: room RMS ~3400.
-    loudness_margin: float = _float("LOUDNESS_MARGIN", 1.8)
+    # 1.5 measured against recordings from the hall: at 1.8 a question came apart into
+    # 400 ms fragments, at 1.3 the room came with it. Here a question arrives whole,
+    # about two seconds of it.
+    loudness_margin: float = _float("LOUDNESS_MARGIN", 1.5)
+    # The same test for interrupting the assistant, but stricter: cutting a caller off
+    # mid-answer is worse than making them repeat themselves, and in a hall the room was
+    # doing it within a second of the answer starting.
+    barge_in_margin: float = _float("BARGE_IN_MARGIN", 2.5)
     # Whether the caller may talk over the greeting. Off: a first-time caller must hear
     # what the service is, and a noisy room interrupts it before they hear anything.
     interruptible_greeting: bool = os.getenv("INTERRUPTIBLE_GREETING", "") == "1"
     preroll_ms: int = _int("PREROLL_MS", 300)  # audio kept before speech starts
+    # How much of what the caller says while the assistant is talking is carried over to
+    # the moment it stops. Long enough for a whole question asked over us.
+    carry_over_s: float = _float("CARRY_OVER_S", 6.0)
     # A phrase this long is sent for recognition even if the noise never lets it end.
     # Better a recognition that fails — and, after three, a person — than a caller
     # talking into a system that is still waiting for a silence that will not come.

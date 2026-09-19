@@ -298,3 +298,27 @@ async def test_two_callers_ending_the_same_call_write_it_down_once():
     reader.feed_eof()
     with contextlib.suppress(Exception):
         await asyncio.wait_for(task, timeout=5)
+
+
+async def test_audio_in_a_format_the_bridge_cannot_decode_goes_to_a_person_at_once():
+    """G.722 has exactly the byte rate of G.711, so decoded as ulaw it is a constant roar
+    with the caller's voice buried inside. That is what a softphone offered wideband
+    produced on the server: the greeting cut off by the roar, twenty seconds of a clearly
+    spoken question, and "I did not understand you" in reply. The endpoint is now limited
+    to G.711, and a format the bridge cannot decode is refused out loud rather than
+    listened to.
+    """
+    call_id = str(uuid.uuid4())
+    reader, writer, registry, session = build(BrokenChatModel())
+    registry.start(call_id).audio_format = "g722"
+    reader.feed_data(encode(0x01, uuid.UUID(call_id).bytes))
+
+    task = asyncio.create_task(session.run())
+    for _ in range(5):
+        reader.feed_data(encode(0x10, SPEECH))
+    await wait_for(lambda: session.state == "closing", timeout=12)
+    reader.feed_eof()
+    await asyncio.wait_for(task, timeout=5)
+
+    assert registry.next_action(call_id) == "operator"
+    assert KIND_HANGUP in writer.kinds(), "the dialplan was never handed the call back"

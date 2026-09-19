@@ -88,6 +88,6 @@ hangup-all:
 	$(SSH) $(SERVER) 'asterisk -rx "channel request hangup all"'
 
 deploy-dialplan:    ## copy the dialplan to Asterisk and reload it
-	rsync -az -e '$(SSH)' asterisk/extensions_custom.conf asterisk/globals_custom.conf asterisk/queues_custom.conf $(SERVER):/etc/asterisk/
-	$(SSH) $(SERVER) 'chown asterisk:asterisk /etc/asterisk/extensions_custom.conf /etc/asterisk/globals_custom.conf /etc/asterisk/queues_custom.conf && fwconsole reload >/dev/null && asterisk -rx "dialplan show globals" | grep EDUVOICE_BRIDGE && asterisk -rx "dialplan show eduvoice-ai" | tail -3'
+	rsync -az -e '$(SSH)' asterisk/extensions_custom.conf asterisk/globals_custom.conf asterisk/queues_custom.conf asterisk/pjsip.endpoint_custom_post.conf $(SERVER):/etc/asterisk/
+	$(SSH) $(SERVER) 'chown asterisk:asterisk /etc/asterisk/extensions_custom.conf /etc/asterisk/globals_custom.conf /etc/asterisk/queues_custom.conf /etc/asterisk/pjsip.endpoint_custom_post.conf && fwconsole reload >/dev/null && asterisk -rx "dialplan show globals" | grep EDUVOICE_BRIDGE && asterisk -rx "pjsip show endpoint 101" | grep -E "^ allow " && asterisk -rx "dialplan show eduvoice-ai" | tail -3'
 
