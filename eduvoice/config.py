@@ -74,7 +74,15 @@ class Settings:
     # Whether the caller may talk over the greeting. Off: a first-time caller must hear
     # what the service is, and a noisy room interrupts it before they hear anything.
     interruptible_greeting: bool = os.getenv("INTERRUPTIBLE_GREETING", "") == "1"
-    preroll_ms: int = _int("PREROLL_MS", 300)  # audio kept before speech starts
+    # Audio kept from before the moment speech is detected and put in front of the
+    # phrase. The detector fires on the first *loud* syllable, and on a quiet line that is
+    # not the first syllable: measured on the bridge's own dumps, 54 % of the frames of a
+    # question sat under the 300 floor, "Akademik" was heard from "-kademik" and
+    # "Stipendiya" from "-pendiya". 300 ms of pre-roll recovered a third of the lost
+    # start, 900 ms most of it; on the venue's handsets (speech at RMS 7000-8400, room at
+    # 60-130) nothing is lost at any setting. It only adds audio already received, so it
+    # cannot break anything; it costs a few credits of recognition per question.
+    preroll_ms: int = _int("PREROLL_MS", 900)
     # How much of what the caller says while the assistant is talking is carried over to
     # the moment it stops. Longer than the greeting (8.8 s), or someone who answers it in
     # its first seconds has already fallen out of the buffer by the time it ends.

@@ -66,9 +66,13 @@ CLOSING_DRAIN_TIMEOUT_S = 15.0
 # Without a limit the call loops: the detector fires on noise, recognition hears nothing,
 # the assistant asks again — six minutes of that, and every lap is a paid recognition.
 MAX_UNHEARD = 3
-# Below this a fragment is not a question and cannot be recognised: the service rejects
-# audio under half a second, and a rejection is not the provider failing.
-MIN_UTTERANCE_MS = 600.0
+# Less speech than this is not a question: a click of the handset, a cough, a chair.
+# Measured on the phrase itself, not on the audio — the pre-roll in front of it is
+# nearly a second on its own. A fragment is ignored in silence. It used to be answered
+# with "I did not hear you, please repeat" — spoken over a caller who was still asking,
+# because the fragment was the first half second of their question. Two calls in the
+# hall ended that way within a minute.
+MIN_SPEECH_MS = 300.0
 # Characters of text the synthesiser is assumed to render per second, on top of the flat
 # first-chunk allowance. Measured at ~150/s on the live service; 100 leaves a margin.
 CHARS_PER_SECOND_OF_BUDGET = 100.0
@@ -123,6 +127,9 @@ class CallSession:
         self._think_task: asyncio.Task[None] | None = None
         self._filler_task: asyncio.Task[None] | None = None
         self._last_answer = ""
+        # The audio of the question being recognised right now. If the caller goes on
+        # talking before anything is said back, it is put in front of what they say next.
+        self._thinking_about = b""
         self._turn_index = 0
         self._reprompts = 0
         self._unheard = 0
@@ -261,9 +268,22 @@ class CallSession:
             return
 
         if self._state == "thinking":
-            # Silence while the answer is being prepared: nothing to interrupt, and the
-            # caller's own thinking-aloud must not be mistaken for a new question.
             if not self._out.speaking:
+                # Nothing has been said back yet, so from the caller's side the question
+                # is still open — and people pause inside a question: to breathe, to find
+                # a word, to look at a document. The phrase ended at that pause and its
+                # first half is being recognised; the second half arrives here. Dropped,
+                # it left the first half answered and the caller talking to nobody. It is
+                # joined to the first half instead, and the whole question is recognised.
+                self._speech.push(frame)
+                if self._speech.in_speech:
+                    log.info(
+                        "call %s: the caller went on talking; joining it to the question",
+                        self.call_id,
+                    )
+                    await self._stop_thinking()
+                    self._speech.prepend(self._thinking_about)
+                    self._state = "listening"
                 return
             # The filler is playing, so the caller *is* being spoken to and may cut in —
             # very often to say "never mind, put me through to a person". Dropping these
@@ -319,11 +339,20 @@ class CallSession:
             return
         asked_already = self._speech.seed(list(self._recent))
         self._recent.clear()
-        if asked_already:
+        if self._speech.in_speech:
+            # They are talking right now — most often this is the very question they
+            # interrupted us with, half a second in. The replay has put its beginning
+            # into the detector; the frames arriving next finish it, and it is handled
+            # whole. Starting a turn here on something that ended earlier in the buffer
+            # answered a fragment and said "please repeat" over the real question.
+            log.info("call %s: the caller is mid-phrase, waiting for it to end", self.call_id)
+            return
+        questions = [u for u in asked_already if u.speech_ms >= MIN_SPEECH_MS]
+        if questions:
             # They asked while we were talking and are now waiting for the answer. The
             # last one is the question they are waiting on.
             log.info("call %s: question asked while we were speaking", self.call_id)
-            self._think(asked_already[-1], carried_over=True)
+            self._think(questions[-1], carried_over=True)
 
     def _speak_prompt(self, prompt_id: str) -> None:
         """Play a service phrase (cached audio, no synthesis delay)."""
@@ -445,8 +474,23 @@ class CallSession:
 
         `carried_over` marks a phrase picked up while the assistant itself was talking.
         Such a turn may answer a question but may not end the call — see `_act`.
+
+        A fragment shorter than a word starts nothing and says nothing: the line stays
+        open and the assistant keeps listening. Reacting to it at all — even to say
+        "please repeat" — meant talking over a caller who had only just begun.
         """
+        if utterance.speech_ms < MIN_SPEECH_MS:
+            log.info(
+                "call %s: %.0f ms of speech in %.0f ms of sound, too short to be a question;"
+                " still listening",
+                self.call_id,
+                utterance.speech_ms,
+                utterance.duration_ms,
+            )
+            self._state = "listening"
+            return
         self._carried_over = carried_over
+        self._thinking_about = utterance.pcm8k
         self._state = "thinking"
         self._reprompts = 0
         self._think_task = asyncio.create_task(self._run_turn(utterance))
@@ -522,17 +566,6 @@ class CallSession:
         """Recognition + decision. Returns None when the caller said nothing recognisable."""
         started = time.monotonic()
         latency: dict[str, float] = {"utterance_ms": utterance.duration_ms}
-
-        if utterance.duration_ms < MIN_UTTERANCE_MS:
-            # Too short to be a word, and the service refuses anything under half a
-            # second outright — an error the bridge would read as "the provider is
-            # broken" and hand the caller to a person over a cough in the room.
-            log.info(
-                "call %s: %.0f ms of sound, too short to be a question",
-                self.call_id,
-                utterance.duration_ms,
-            )
-            return None
 
         pcm16k = resample(utterance.pcm8k, SAMPLE_RATE_TELEPHONY, SAMPLE_RATE_STT)
         transcript = await asyncio.wait_for(

@@ -273,3 +273,45 @@ def test_a_step_above_the_room_alone_would_hear_a_rustle_on_a_silent_line():
 
     assert gate(_noise(120)) is False, "a rustle on a quiet line was taken for the caller"
     assert gate(_noise(4000)) is True, "and the caller must still be heard"
+
+
+def test_what_was_said_a_moment_ago_is_put_in_front_of_the_phrase_in_progress():
+    """A question split by a pause is joined back into one utterance: the first half is
+    prepended, and the finished phrase carries both halves in the order they were said."""
+    cfg = replace(base_settings, speech_start_frames=2, speech_start_window=3, silence_end_frames=5)
+    detector = SpeechDetector(cfg, speech_test=lambda f: f[:1] == b"\x11")
+    first_half = b"\x11\x01" * 1600  # 200 ms marked so it can be found again
+
+    for frame in [SPEECH] * 3:
+        detector.push(frame)
+    assert detector.in_speech
+    detector.prepend(first_half)
+    utterance = None
+    for frame in [SPEECH] * 3 + [QUIET] * 10:
+        utterance = detector.push(frame) or utterance
+
+    assert utterance is not None
+    assert utterance.pcm8k.startswith(first_half), "the first half is not in front"
+    assert utterance.duration_ms >= 200 + 6 * 20, "the second half was lost in the join"
+
+
+def test_a_fragment_is_judged_by_its_speech_not_by_the_audio_around_it():
+    """Nine hundred milliseconds of pre-roll make a door slam over a second long. What the
+    detector reports as speech is the slam itself: the pre-roll in front of it and the
+    silence behind it are audio, not words."""
+    cfg = replace(
+        base_settings,
+        preroll_ms=900,
+        speech_start_frames=2,
+        speech_start_window=3,
+        silence_end_frames=5,
+    )
+    detector = SpeechDetector(cfg, speech_test=lambda f: f[:1] == b"\x11")
+
+    utterance = None
+    for frame in [QUIET] * 45 + [SPEECH] * 3 + [QUIET] * 10:
+        utterance = detector.push(frame) or utterance
+
+    assert utterance is not None
+    assert utterance.duration_ms > 600, "the pre-roll is missing from the audio"
+    assert utterance.speech_ms <= 3 * 20, f"{utterance.speech_ms} ms counted as speech"

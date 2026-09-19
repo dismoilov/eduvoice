@@ -388,34 +388,163 @@ async def test_a_question_finished_over_the_answer_is_not_undone_by_the_second_l
     await session.aclose()
 
 
-async def test_a_fragment_of_room_noise_is_not_sent_for_recognition():
+class RecordingStt:
+    """Remembers how much audio each recognition was given, and how many completed.
+
+    `pcm_ms` is the length of every request made; `completed` counts the ones that were
+    not cancelled. The difference between the two is what a joined question looks like:
+    one recognition abandoned, one finished with everything in it.
+    """
+
+    def __init__(self, latency_ms: int = 10) -> None:
+        self.pcm_ms: list[float] = []
+        self.completed = 0
+        self._latency_ms = latency_ms
+
+    async def open(self, language: str) -> None:
+        return None
+
+    async def transcribe(self, pcm16k: bytes):
+        from eduvoice.interfaces import Transcript
+
+        self.pcm_ms.append(len(pcm16k) / 32)  # 16 kHz, 2 bytes per sample -> 32 bytes/ms
+        await asyncio.sleep(self._latency_ms / 1000)
+        self.completed += 1
+        return Transcript(
+            text="stipendiya qanday olinadi", language="uz", duration_ms=0, latency_ms=0
+        )
+
+    async def close(self) -> None:
+        return None
+
+
+async def test_a_fragment_of_room_noise_is_neither_recognised_nor_answered():
     """The service refuses audio under half a second, and the bridge read that refusal as
     the provider failing — so a cough during the greeting ended the call with "technical
-    problem, transferring you". Seen on a real call: the carry-over handed over a burst of
-    room noise, recognition rejected it, and the caller lost the conversation.
+    problem, transferring you". Fixed once by not recognising the fragment; but the
+    fragment was then answered with "I did not hear you, please repeat" — spoken over a
+    caller who was half a second into their question. A fragment starts nothing.
     """
     _reader, _writer, _registry, session = build(BrokenChatModel())
+    session._stt = RecordingStt()
+    session._state = "listening"
+    # A cough behind most of a second of pre-roll: over a second of audio, 120 ms of it
+    # speech. Judged by its length it would be a question.
+    fragment = Utterance(pcm8k=b"\x00\x01" * 8800, ended_by="silence", speech_ms=120)
+    assert fragment.duration_ms > 1000
 
-    class Counting:
-        def __init__(self) -> None:
-            self.asked = 0
+    session._think(fragment)
+    await asyncio.sleep(0.05)
 
-        async def open(self, language: str) -> None:
-            return None
+    assert session._stt.pcm_ms == [], "a fragment reached recognition"
+    assert "qaytaring" not in session._tts.spoken, "the assistant spoke over the caller"
+    assert session.state == "listening", "the line was left parked"
+    assert session._unheard == 0, "a fragment counted towards a transfer"
+    await session.aclose()
 
-        async def transcribe(self, pcm16k: bytes):
-            self.asked += 1
-            raise AssertionError("a fragment must never reach recognition")
 
-        async def close(self) -> None:
-            return None
+async def test_a_click_under_the_greeting_does_not_make_the_assistant_say_please_repeat():
+    """Call d7d8d668, 15:53: the handset clicked half a second into the greeting. When the
+    greeting ended, the click was carried over, judged too short, and the assistant said
+    "ask your question" and then, at once, "sorry, I did not hear you, please repeat" —
+    before the caller had opened their mouth. They hung up at nine seconds.
+    """
+    _reader, _writer, _registry, session = build(SlowChatModel())
+    session._stt = RecordingStt()
+    session._state = "speaking"
+    for _ in range(40):  # the room, quiet, for most of a second
+        session._recent.append(QUIET)
+    for _ in range(3):  # the click: enough frames to start a phrase under CONFIG
+        session._recent.append(SPEECH)
+    for _ in range(20):  # then nothing, until we stopped talking
+        session._recent.append(QUIET)
 
-    session._stt = Counting()
-    fragment = Utterance(pcm8k=b"\x00\x01" * 1200, ended_by="silence")  # 300 ms
-    assert fragment.duration_ms < 600
+    session._listen()
+    await asyncio.sleep(0.05)
 
-    assert await session._decide(fragment) is None
-    assert session._stt.asked == 0
+    assert "qaytaring" not in session._tts.spoken, "the assistant told a silent caller to repeat"
+    # With most of a second of pre-roll in front of it, the click is over half a second of
+    # *audio*. Judged by length it is a question; judged by speech it is sixty milliseconds.
+    assert session._stt.pcm_ms == [], "a click was sent for recognition"
+    assert session.state == "listening"
+    await session.aclose()
+
+
+async def test_a_click_after_the_question_does_not_hide_the_question():
+    """Over the greeting: a whole question, then the caller shifts the handset. The last
+    thing in the buffer is the click. Picking "the last thing" by its audio length —
+    nearly a second, all of it pre-roll — chose the click, judged it a fragment, and the
+    question in front of it was never recognised.
+    """
+    _reader, _writer, _registry, session = build(SlowChatModel())
+    stt = RecordingStt()
+    session._stt = stt
+    session._state = "speaking"
+    for frame in [SPEECH] * 35 + [QUIET] * 40 + [SPEECH] * 3 + [QUIET] * 10:
+        session._recent.append(frame)
+
+    session._listen()
+    await wait_for(lambda: stt.completed == 1)
+
+    assert stt.pcm_ms[0] >= 35 * 20, "the click was recognised instead of the question"
+    await session.aclose()
+
+
+async def test_a_question_interrupted_into_is_heard_to_its_end():
+    """Call 707c8caa, 15:14 — "it does not hear the question to the end". The caller
+    interrupted the answer with a second question. The assistant stopped, correctly; but
+    the buffer also held an earlier burst that had ended in silence, and the assistant
+    started a turn on that burst instead of waiting for the phrase in progress. Frames
+    are dropped while it thinks, so the rest of the question fell on the floor, and the
+    verdict on the burst — "too short" — became "please repeat", spoken over the caller.
+
+    Whoever is mid-phrase when we stop talking is finishing their question. We wait —
+    and we do not start recognising something they said earlier only to cancel it a
+    moment later: the phrase they are still saying is the one they want answered.
+    """
+    _reader, _writer, _registry, session = build(SlowChatModel())
+    stt = RecordingStt()
+    session._stt = stt
+    session._state = "speaking"
+    # Over the answer: a whole earlier phrase, a pause, then the question — still going.
+    for frame in [SPEECH] * 35 + [QUIET] * 10 + [SPEECH] * 30:
+        session._recent.append(frame)
+
+    session._listen()  # barge-in: back to the caller with what they said over us
+    assert session.state == "listening", "a turn was started on the earlier phrase"
+    for frame in [SPEECH] * 20 + [QUIET] * 10:  # the caller finishes the question
+        await session._on_audio(frame)
+    await wait_for(lambda: stt.completed == 1)
+
+    assert "qaytaring" not in session._tts.spoken, "spoke over the caller"
+    assert len(stt.pcm_ms) == 1, "a recognition was started and thrown away"
+    assert stt.pcm_ms[0] >= 50 * 20, "the beginning of the question was not carried over"
+    await session.aclose()
+
+
+async def test_a_pause_in_the_middle_of_a_question_does_not_split_it():
+    """People pause inside a question — to breathe, to find a word, to read a document.
+    The phrase ended at the pause, the first half went for recognition and the second
+    half arrived while nothing was being said back; it was dropped as "nothing to
+    interrupt". The first half was answered and the caller was talking to nobody.
+
+    If the caller goes on before we have said anything, the halves are one question.
+    """
+    _reader, _writer, _registry, session = build(SlowChatModel())
+    stt = RecordingStt(latency_ms=400)  # slow enough for the caller to resume meanwhile
+    session._stt = stt
+    session._state = "listening"
+
+    for frame in [SPEECH] * 35 + [QUIET] * 10:  # "stipendiya qanday…" then a breath
+        await session._on_audio(frame)
+    assert session.state == "thinking"
+    for frame in [SPEECH] * 35 + [QUIET] * 10:  # "…olinadi?"
+        await session._on_audio(frame)
+    await wait_for(lambda: stt.completed == 1)
+
+    assert stt.completed == 1, "both halves were recognised separately"
+    assert stt.pcm_ms[-1] >= 70 * 20, "the recognised question lacks one of its halves"
+    await session.aclose()
 
 
 LONG_GREETING = dict(PROMPTS, greeting="salom " * 60)  # seconds of speech from the fake

@@ -49,10 +49,21 @@ class WebrtcSpeechTest:
 
 @dataclass(frozen=True, slots=True)
 class Utterance:
-    """One finished phrase, ready to be sent for recognition."""
+    """One finished phrase, ready to be sent for recognition.
+
+    `speech_ms` is how much of it the detector actually heard as speech: the audio
+    minus the pre-roll in front and the silence behind. The whole length says nothing
+    about whether anyone spoke — with 900 ms of pre-roll a door slam is over a second
+    long — so that is the number to judge a fragment by.
+    """
 
     pcm8k: bytes
     ended_by: str  # "silence" | "max_length"
+    speech_ms: float = -1.0
+
+    def __post_init__(self) -> None:
+        if self.speech_ms < 0:  # not measured: assume it is all speech
+            object.__setattr__(self, "speech_ms", self.duration_ms)
 
     @property
     def duration_ms(self) -> float:
@@ -143,6 +154,7 @@ class SpeechDetector:
         self._preroll = deque[bytes](maxlen=max(1, int(cfg.preroll_ms / FRAME_MS)))
         self._utterance = bytearray()
         self._frame_bytes = frame_bytes(SAMPLE_RATE_TELEPHONY)
+        self._lead_bytes = 0  # the pre-roll in front of the phrase: not speech
         self._silence_frames = 0
         self._idle_frames = 0
         self.in_speech = False
@@ -151,6 +163,7 @@ class SpeechDetector:
         self._start_window.clear()
         self._preroll.clear()
         self._utterance.clear()
+        self._lead_bytes = 0
         self._silence_frames = 0
         self._idle_frames = 0
         self.in_speech = False
@@ -176,6 +189,18 @@ class SpeechDetector:
         self._idle_frames = 0
         return found
 
+    def prepend(self, pcm8k: bytes) -> None:
+        """Puts what the caller said a moment ago in front of the phrase in progress.
+
+        A question with a pause in the middle ends twice: the first half is sent for
+        recognition, the second half arrives while the answer to the first is being
+        prepared. Joined, they are one question; apart, the first half is answered and
+        the second half is thrown away. The session calls this when speech resumes
+        before anything has been said back, so the phrase now in progress finishes as the
+        whole question.
+        """
+        self._utterance[:0] = pcm8k
+
     @property
     def silence_ms(self) -> float:
         """How long the caller has been quiet while we are waiting for a phrase."""
@@ -190,7 +215,9 @@ class SpeechDetector:
             self._idle_frames = 0 if speech else self._idle_frames + 1
             if sum(self._start_window) >= self._start_needed:
                 self.in_speech = True
-                self._utterance.extend(b"".join(self._preroll))
+                lead = b"".join(self._preroll)
+                self._lead_bytes = len(lead)
+                self._utterance.extend(lead)
                 self._preroll.clear()
                 self._start_window.clear()
                 self._silence_frames = 0
@@ -213,8 +240,10 @@ class SpeechDetector:
             trim_frames = max(0, self._silence_frames - KEEP_TAIL_FRAMES)
             trim = min(len(pcm), trim_frames * self._frame_bytes)
             pcm = pcm[: len(pcm) - trim]
+        spoken = len(self._utterance) - self._lead_bytes - self._silence_frames * self._frame_bytes
+        speech_ms = max(0.0, spoken / self._frame_bytes * FRAME_MS)
         self.reset()
-        return Utterance(pcm8k=pcm, ended_by=reason)
+        return Utterance(pcm8k=pcm, ended_by=reason, speech_ms=speech_ms)
 
 
 class BargeInDetector:
