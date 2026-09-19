@@ -174,11 +174,29 @@ class Brain:
         decision = self._from_intent(intent, raw)
         decision.latency_ms = latency_ms
 
+        if decision.action == "answer" and self._laws is not None:
+            # The model wrote an answer of its own. Asked how long a bachelor's degree
+            # takes, it said "usually four years"; the regulation says at least three.
+            # With the regulations at hand, an answer from memory is either confirmed by
+            # a clause — and then the clause is what is read out, with its number — or
+            # it is not read out at all. That is what "strictly by the regulations"
+            # means, and a ministry line cannot afford the other thing.
+            if (from_law := await self._from_law(question)) is not None:
+                self.unclear_streak = 0
+                from_law.latency_ms = (asyncio.get_running_loop().time() - started) * 1000
+                return from_law
+            log.info("model answered %r from memory; nothing in the law -> clarify", question[:60])
+            decision = self._unclear("ungrounded")
+            decision.latency_ms = latency_ms
+            tried_law = True
+        else:
+            tried_law = False
+
         if decision.action == "clarify":
             # Last resort before "I did not understand you": the regulations themselves.
             # Only here, so the common paths cost nothing extra, and only from the text
             # in front of the model — see `_from_law`.
-            if (from_law := await self._from_law(question)) is not None:
+            if not tried_law and (from_law := await self._from_law(question)) is not None:
                 self.unclear_streak = 0
                 from_law.latency_ms = (
                     asyncio.get_running_loop().time() - started

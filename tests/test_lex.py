@@ -318,3 +318,65 @@ async def test_reading_the_law_gets_its_own_time():
 
     assert decision.intent == "law", "the reading was cut off by the classifier's budget"
     assert "344-son" in decision.source
+
+
+class Memory:
+    """Answers the question from memory first — wrongly — and reads the law correctly
+    when it is put in front of it. The real model did exactly this on 19.09."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def complete_json(self, messages: list[ChatMessage], timeout_s: float) -> dict:
+        self.calls += 1
+        if self.calls == 1:
+            return {"intent": "answer", "answer": "Bakalavriat toʻrt yil davom etadi."}
+        return {"clause": 1, "answer": "Bakalavriat kamida uch yil davom etadi."}
+
+
+DURATION = Clause(
+    number="3807-son",
+    title="Oliy taʼlim toʻgʻrisidagi nizom",
+    doc_id="-8117474",
+    element="-8120411",
+    band="13",
+    text="13. Bakalavriat taʼlim bosqichida oʻqish kamida uch yil davom etadi.",
+)
+
+
+async def test_an_answer_from_memory_is_replaced_by_the_clause_that_actually_says_it():
+    """Asked how long a bachelor's degree takes, the live model said "usually four years"
+    — from memory, with no source. The regulation says at least three. On a ministry
+    line the clause is read out, with its number, and the model's own version is not."""
+    model = Memory()
+    brain = Brain(model, faq={}, laws=Fixed(DURATION))
+
+    decision = await brain.decide("Bakalavriat necha yil davom etadi?")
+
+    assert decision.intent == "law", "the answer from memory reached the caller"
+    assert "uch yil" in decision.text and "toʻrt" not in decision.text
+    assert "3807-son, 13-band" in decision.source
+    assert model.calls == 2, "the law was not consulted"
+
+
+async def test_an_answer_from_memory_with_nothing_in_the_law_is_not_read_out():
+    """The other case: the model has an answer and the regulations have nothing on it.
+    Nothing is what the caller gets from the assistant — a person, not a guess."""
+    brain = Brain(Memory(), faq={}, laws=Fixed())
+
+    decision = await brain.decide("Bakalavriat necha yil davom etadi?")
+
+    assert decision.action != "answer", "an unsourced answer was read out"
+    assert decision.source == ""
+
+
+async def test_without_a_law_corpus_the_model_may_still_answer():
+    """Fake mode and the tests run without regulations. There the model's own answer is
+    the only one there is, and it is kept — the guard exists for the corpus, not
+    instead of it."""
+    brain = Brain(Memory(), faq={}, laws=None)
+
+    decision = await brain.decide("Bakalavriat necha yil davom etadi?")
+
+    assert decision.action == "answer"
+    assert "toʻrt yil" in decision.text
