@@ -32,7 +32,7 @@ AudioSocket — очень простой протокол: один байт т
 нём нет — поэтому всё остальное ходит по HTTP через функцию `CURL()` диалплана:
 
 ```
-POST /calls/{uuid}/start   caller=998901234567   → «ok»      (до начала разговора)
+POST /calls/{uuid}/start   caller=998901234567&format=(ulaw)  → «ok»   (до разговора)
 GET  /calls/{uuid}/next                          → operator | hangup   (после)
 GET  /calls/{uuid}/summary                       → JSON звонка
 GET  /health                                     → состояние сервиса
