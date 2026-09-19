@@ -22,7 +22,7 @@ from eduvoice.content import Faq
 from eduvoice.control_api import serve_control_api
 from eduvoice.interfaces import ChatModel, SpeechToText, TextToSpeech
 from eduvoice.prompts import PromptLibrary
-from eduvoice.registry import registry
+from eduvoice.registry import CallRegistry, registry
 from eduvoice.session import CallSession
 from store.knowledge import PublishedKnowledge
 from store.write import CallStore
@@ -49,6 +49,22 @@ SHUTDOWN_GRACE_S = 10.0
 # Calls in progress right now, so that a stop signal can write them down before exiting.
 live: set[CallSession] = set()
 shutting_down = asyncio.Event()
+
+
+def send_to_a_person_unless_decided(calls: CallRegistry, call_id: str) -> None:
+    """After a crash the dialplan must still get an answer — but not a different one.
+
+    A session that finished its cleanup has already decided and written the call down. A
+    late exception from the socket teardown must not turn that "hangup" into "operator":
+    the caller had said goodbye, and the dialplan, asking a moment later, would have sent
+    them to the queue instead.
+    """
+    if not call_id:
+        return
+    record = calls.get(call_id)
+    if record is not None and record.ended_at is not None:
+        return
+    calls.set_next(call_id, "operator")
 
 
 def make_call_handler(faq: Faq, prompts: PromptLibrary, knowledge=None, store=None):
@@ -92,9 +108,7 @@ def make_call_handler(faq: Faq, prompts: PromptLibrary, knowledge=None, store=No
         except Exception:  # one broken call must not take the bridge down
             call_id = session.call_id if session else ""
             log.exception("call %s crashed", call_id or "unknown")
-            # The dialplan asks what to do next; "operator" means a human picks up.
-            if call_id:
-                registry.set_next(call_id, "operator")
+            send_to_a_person_unless_decided(registry, call_id)
             if session is not None:
                 with contextlib.suppress(Exception):
                     await session.aclose()

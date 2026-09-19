@@ -147,3 +147,34 @@ async def test_new_audio_after_clear_is_played():
     await out.aclose()
 
     assert writer.frames()[-1] == b"\x02" * FRAME_BYTES
+
+
+async def test_a_socket_that_broke_on_our_last_write_is_a_hangup_not_a_crash():
+    """Asterisk closes the socket the instant our goodbye ends. The transport records the
+    failed write and the *reader* raises it on its next call — after cleanup was done.
+    Uncaught, that came out of run() as "call crashed", and the crash handler then turned
+    a "hangup" into "operator" for someone who had just said goodbye."""
+    from eduvoice.audiosocket import read_frames
+
+    class Broken:
+        async def readexactly(self, n: int) -> bytes:
+            raise BrokenPipeError(32, "Broken pipe")
+
+    frames = [frame async for frame in read_frames(Broken())]  # type: ignore[arg-type]
+    assert frames == []
+
+
+def test_a_finished_call_keeps_its_decision_after_a_late_exception():
+    from eduvoice.main import send_to_a_person_unless_decided
+    from eduvoice.registry import CallRegistry
+
+    calls = CallRegistry()
+    calls.start("done")
+    calls.set_next("done", "hangup")
+    calls.finish("done")
+    send_to_a_person_unless_decided(calls, "done")
+    assert calls.next_action("done") == "hangup", "a goodbye was turned into a transfer"
+
+    calls.start("mid-call")
+    send_to_a_person_unless_decided(calls, "mid-call")
+    assert calls.next_action("mid-call") == "operator", "a real crash must still reach a person"

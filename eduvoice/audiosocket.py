@@ -70,7 +70,13 @@ async def read_frames(reader: asyncio.StreamReader) -> AsyncIterator[Frame]:
             header = await reader.readexactly(HEADER.size)
             kind, length = HEADER.unpack(header)
             payload = await reader.readexactly(length) if length else b""
-        except (asyncio.IncompleteReadError, ConnectionResetError):
+        except (asyncio.IncompleteReadError, OSError):
+            # The connection is gone, whichever side let go first. `BrokenPipeError` is
+            # the one that was missing: Asterisk closes the socket the instant our
+            # goodbye ends, the transport records the failed write, and the *reader*
+            # raises it on its next call — after cleanup had already finished. It came
+            # out of run() as a crash, and the crash handler then overrode a "hangup"
+            # decision with "operator" for a caller who had just said goodbye.
             return
         yield Frame(kind, payload)
         if kind == KIND_HANGUP:
