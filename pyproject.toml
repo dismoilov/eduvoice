@@ -25,6 +25,7 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=1",
     "pytest-cov>=7.1.0",
+    "pytest-timeout>=2.4.0",
     "ruff>=0.14",
 ]
 
@@ -37,6 +38,9 @@ package = false
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+# A call test that hangs must fail, not run forever. Without this a broken bridge made
+# the suite — and `make deploy`, which runs it first — stall instead of going red.
+timeout = 60
 
 [tool.ruff]
 line-length = 100

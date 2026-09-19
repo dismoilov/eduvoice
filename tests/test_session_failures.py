@@ -30,6 +30,13 @@ class BrokenChatModel:
         raise ValueError("unexpected provider failure")
 
 
+class FarewellModel:
+    """Answers every utterance with a goodbye, so `_finish("hangup", …)` is exercised."""
+
+    async def complete_json(self, messages: list[ChatMessage], timeout_s: float) -> dict:
+        return {"intent": "goodbye"}
+
+
 class SilentChatModel:
     """Never answers: the model hangs instead of failing."""
 
@@ -105,19 +112,26 @@ async def test_a_broken_model_transfers_instead_of_leaving_the_caller_in_silence
 
 
 async def test_the_dialplan_is_told_what_to_do_even_if_the_closing_phrase_is_missing():
-    """The decision is written down before anything that can fail is attempted."""
+    """The decision is written down before anything that can fail is attempted.
+
+    Checked on the goodbye, not the transfer: "operator" is what the registry answers for
+    a call it has never heard of, so a transfer test passes just as well when the
+    decision is never written at all. "hangup" can only come from `_finish`.
+    """
     call_id = str(uuid.uuid4())
-    incomplete = {k: v for k, v in PROMPTS.items() if k != "tech_problem"}
-    reader, _writer, registry, session = build(BrokenChatModel(), prompts=incomplete)
+    incomplete = {k: v for k, v in PROMPTS.items() if k != "goodbye"}
+    reader, _writer, registry, session = build(FarewellModel(), prompts=incomplete)
     reader.feed_data(encode(0x01, uuid.UUID(call_id).bytes))
 
     task = asyncio.create_task(session.run())
     await ask(reader, session)
-    await wait_for(lambda: registry.next_action(call_id) == "operator", timeout=12)
+    await wait_for(lambda: registry.next_action(call_id) == "hangup", timeout=12)
     reader.feed_eof()
     await asyncio.wait_for(task, timeout=5)
 
-    assert registry.next_action(call_id) == "operator"
+    assert registry.next_action(call_id) == "hangup", (
+        "the caller said goodbye and the dialplan was told to fetch a human"
+    )
 
 
 async def test_cleanup_runs_even_when_the_socket_dies_mid_answer():
@@ -402,3 +416,94 @@ async def test_a_fragment_of_room_noise_is_not_sent_for_recognition():
 
     assert await session._decide(fragment) is None
     assert session._stt.asked == 0
+
+
+LONG_GREETING = dict(PROMPTS, greeting="salom " * 60)  # seconds of speech from the fake
+
+
+async def test_the_greeting_plays_to_the_end_however_loud_the_room_is():
+    """The behaviour most likely to be demonstrated live, and it had no test at all.
+
+    A caller hearing this service for the first time is told what it is and how to use
+    it. In a hall the room itself was cutting that off within half a second, every call,
+    so nobody ever learned where they had got through to.
+    """
+    call_id = str(uuid.uuid4())
+    reader, _writer, _registry, session = build(BrokenChatModel(), prompts=LONG_GREETING)
+    reader.feed_data(encode(0x01, uuid.UUID(call_id).bytes))
+    task = asyncio.create_task(session.run())
+    # Only once the greeting is audible: before that there is nothing to interrupt, and a
+    # test that shouts into silence proves nothing either way.
+    await wait_for(lambda: session._out.speaking, timeout=5)
+
+    for _ in range(60):
+        reader.feed_data(encode(0x10, SPEECH))
+        await asyncio.sleep(0.005)
+
+    assert session.state == "greeting", "the room cut the greeting off"
+    reader.feed_eof()
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(task, timeout=5)
+
+
+async def test_a_caller_may_still_interrupt_the_greeting_when_it_is_allowed():
+    """The same greeting, the same frames, the same moment — one setting apart, so the
+    test above is measuring the setting and not the silence before the greeting starts."""
+    call_id = str(uuid.uuid4())
+    talkative = replace(CONFIG, interruptible_greeting=True)
+    reader, _writer, _registry, session = build(
+        BrokenChatModel(), prompts=LONG_GREETING, config=talkative
+    )
+    reader.feed_data(encode(0x01, uuid.UUID(call_id).bytes))
+    task = asyncio.create_task(session.run())
+    await wait_for(lambda: session._out.speaking, timeout=5)
+
+    for _ in range(60):
+        reader.feed_data(encode(0x10, SPEECH))
+        await asyncio.sleep(0.005)
+
+    assert session.state != "greeting", "the caller could not interrupt when allowed to"
+    reader.feed_eof()
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(task, timeout=5)
+
+
+async def test_a_telephone_s_g711_is_decoded_before_anything_listens_to_it():
+    """The decoding table has its own test; this is the wiring, which is where the bug
+    was. Twenty seconds of a clearly spoken question produced not one turn because the
+    bridge read G.711 bytes as 16-bit samples — a roar with the voice buried in it.
+
+    The frames handed to the detectors are what matters, so that is what is measured:
+    sent at RMS 8000, they must arrive at RMS 8000. Undecoded they arrive at twice that,
+    and the silence between words arrives louder than the words.
+    """
+    import numpy as np
+
+    from eduvoice.audio import ULAW_TO_LINEAR
+
+    seen: list[float] = []
+
+    def watch(frame: bytes) -> bool:
+        block = np.frombuffer(frame, dtype=np.int16).astype(np.float32)
+        seen.append(float(np.sqrt(np.mean(block * block))))
+        return False
+
+    call_id = str(uuid.uuid4())
+    _reader, _writer, registry, session = build(BrokenChatModel())
+    registry.start(call_id).audio_format = "ulaw"
+    session.call_id = call_id
+    session._state = "listening"
+    session._speech = SpeechDetector(CONFIG, speech_test=watch)
+
+    to_ulaw = {int(v): i for i, v in enumerate(ULAW_TO_LINEAR)}
+    levels = sorted(to_ulaw)
+    nearest = lambda want: to_ulaw[min(levels, key=lambda v: abs(v - want))]  # noqa: E731
+
+    await session._on_incoming_audio(bytes([nearest(8000), nearest(-8000)] * 80))
+    await session._on_incoming_audio(bytes([nearest(0)] * 160))
+
+    assert len(seen) == 2, f"{len(seen)} frames reached the detector, expected 2"
+    spoken, silent = seen
+    assert 7000 < spoken < 9000, f"a word arrived at RMS {spoken:.0f}, not the 8000 sent"
+    assert silent < 100, f"silence arrived at RMS {silent:.0f}"
+    await session.aclose()

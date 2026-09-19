@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from eduvoice.control_api import serve_control_api
+from eduvoice.control_api import ControlApi, serve_control_api
 from eduvoice.registry import CallRegistry
 
 
@@ -173,31 +173,22 @@ def test_calls_that_never_reached_the_bridge_are_eventually_forgotten():
     assert len(registry._calls) <= 120, f"{len(registry._calls)} records retained"
 
 
-def test_the_native_format_arrives_in_asterisk_s_own_notation():
-    """`CHANNEL(audionativeformat)` answers "(ulaw)" or "(ulaw|alaw)", brackets and all."""
-    from eduvoice.registry import CallRegistry
+def test_the_dialplan_s_format_reaches_the_call_through_the_control_api():
+    """Driven through `_route`, not by repeating its parsing inside the test.
 
+    `CHANNEL(audionativeformat)` answers "(ulaw)" or "(ulaw|alaw)", brackets and all, and
+    what the bridge does with that decides whether a telephone is understood or heard as
+    a roar. A retry must not blank it: emptied, the call falls back to "linear".
+    """
     registry = CallRegistry()
-    for sent, expected in (("(ulaw)", "ulaw"), ("(ulaw|alaw)", "ulaw"), ("slin", "slin"), ("", "")):
-        started = registry.start(f"fmt-{sent}")
-        raw_format = sent.strip().lower()
-        started.audio_format = raw_format.strip("()").split("|")[0].strip()
-        assert started.audio_format == expected, f"{sent!r} parsed as {started.audio_format!r}"
+    api = ControlApi(registry)
 
+    api._route("POST", "/calls/abc/start", "caller=998901234567&format=(ulaw|alaw)")
+    assert registry.get("abc").audio_format == "ulaw"
+    assert registry.get("abc").caller == "998901234567"
 
-def test_a_repeated_announcement_keeps_the_format_it_already_knows():
-    """`registry.start` exists to survive a dialplan retry. The format has to survive it
-    too: emptied, the call falls back to "linear" and a telephone's G.711 is heard as a
-    roar — which is exactly the failure this field was added to prevent."""
-    from eduvoice.registry import CallRegistry
+    api._route("POST", "/calls/abc/start", "caller=998901234567")
+    assert registry.get("abc").audio_format == "ulaw", "a retry blanked the format"
 
-    registry = CallRegistry()
-    first = registry.start("retried")
-    first.audio_format = "ulaw"
-
-    again = registry.start("retried")
-    raw = ""
-    if raw:
-        again.audio_format = raw
-
-    assert again.audio_format == "ulaw"
+    api._route("POST", "/calls/def/start", "caller=1&format=slin")
+    assert registry.get("def").audio_format == "slin"

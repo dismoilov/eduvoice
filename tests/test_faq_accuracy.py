@@ -85,3 +85,28 @@ def test_a_more_specific_keyword_beats_a_more_general_one():
     assert general.faq_id == "stipend"
     assert particular.faq_id == "stipend_academic_leave"
     assert "toʻlanmaydi" in particular.answer, "the specific answer says the opposite thing"
+
+
+# What each answer must say, in the caller's own terms. Six lines standing between a
+# careless edit and a citizen being told the opposite of the law: only one of these was
+# pinned before, and reversing "toʻlanmaydi" to "toʻlanadi" — no stipend during academic
+# leave, into: there is one — changed the legal meaning with nothing to stop it.
+MUST_SAY: list[tuple[str, tuple[str, ...], str]] = [
+    ("stipend", ("toʻlanadi",), "59-son"),
+    ("stipend_academic_leave", ("toʻlanmaydi",), "344-son"),
+    ("academic_leave", ("ariza",), "344-son"),
+    ("academic_leave_duration", ("semestr",), "344-son"),
+    ("transfer_university", ("koʻchirish",), "578-son"),
+    ("transfer_documents", ("ariza", "maʼlumotnoma"), "578-son"),
+]
+
+
+@pytest.mark.parametrize("faq_id, words, document", MUST_SAY, ids=[m[0] for m in MUST_SAY])
+def test_each_answer_still_says_what_the_regulation_says(faq_id, words, document):
+    faq = Faq.load(CONTENT)
+    entry = faq.entry(faq_id)
+
+    assert entry is not None, f"{faq_id} is gone from content/faq.yaml"
+    for word in words:
+        assert word in entry.answer, f"{faq_id} no longer says {word!r}"
+    assert document in entry.source, f"{faq_id} no longer cites {document}"

@@ -234,3 +234,42 @@ def test_waiting_for_the_assistant_to_stop_is_not_the_caller_s_silence():
     detector.seed([quiet] * 400)  # eight seconds of greeting, caller politely waiting
 
     assert detector.silence_ms == 0, f"{detector.silence_ms:.0f} ms counted against them"
+
+
+def test_the_room_level_is_the_tenth_percentile_not_the_lowest_frame():
+    """The first frame of a call arrives before any room audio does — measured at 149
+    against a hall at 4000. Taken as the minimum, that one frame set the bar for the next
+    two seconds and the room walked over it, cutting the answer off half a second in."""
+    from eduvoice.vad import LoudnessGate
+
+    gate = LoudnessGate(base_settings.loudness_margin, floor_at_least=1.0)
+    gate(_noise(1))  # the moment of connection, before the room is heard
+    for _ in range(90):  # leaves that frame inside the window when the bar is read
+        gate(_noise(2000))
+
+    assert gate(_noise(2500)) is False, "one silent frame set the bar for the whole window"
+
+
+def test_a_fixed_level_alone_would_be_deaf_in_a_loud_room():
+    """Both halves of the threshold earn their place: without the margin, a room louder
+    than the fixed level is heard as speech from end to end."""
+    from eduvoice.vad import LoudnessGate
+
+    gate = LoudnessGate(base_settings.loudness_margin, floor_at_least=base_settings.speech_floor)
+    heard = [gate(_noise(1500, seed=i)) for i in range(120)]
+
+    assert not any(heard[20:]), "a room above the fixed level was taken for the caller"
+
+
+def test_a_step_above_the_room_alone_would_hear_a_rustle_on_a_silent_line():
+    """The other half. On a near-silent line a ratio collapses onto nothing: twice a room
+    at RMS 14 is 28, and a chair moving clears it. The fixed level is what a caller has to
+    reach before anything is listened to at all."""
+    from eduvoice.vad import LoudnessGate
+
+    gate = LoudnessGate(base_settings.loudness_margin, floor_at_least=base_settings.speech_floor)
+    for _ in range(120):
+        gate(_noise(14))
+
+    assert gate(_noise(120)) is False, "a rustle on a quiet line was taken for the caller"
+    assert gate(_noise(4000)) is True, "and the caller must still be heard"
