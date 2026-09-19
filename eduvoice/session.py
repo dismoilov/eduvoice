@@ -47,6 +47,7 @@ from eduvoice.interfaces import (
     ProviderError,
     SpeechToText,
     TextToSpeech,
+    describe,
 )
 from eduvoice.prompts import PromptLibrary
 from eduvoice.registry import CallRegistry, Turn
@@ -442,7 +443,7 @@ class CallSession:
         except asyncio.CancelledError:
             raise
         except (ProviderError, TimeoutError) as exc:
-            log.warning("call %s: turn failed (%s) -> operator", self.call_id, exc)
+            log.warning("call %s: turn failed (%s) -> operator", self.call_id, describe(exc))
             await self._finish("operator", "tech_problem")
             return
         except Exception:

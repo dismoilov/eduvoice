@@ -72,6 +72,16 @@ class ChatModel(Protocol):
         """Model reply parsed as a JSON object (decision schema lives in eduvoice.brain)."""
 
 
+def describe(exc: BaseException) -> str:
+    """The exception as a log line should show it.
+
+    `str(TimeoutError())` is the empty string, so the one line that explains why a caller
+    was handed to an operator used to read `turn failed ()` — which is no explanation.
+    """
+    text = str(exc).strip()
+    return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
+
+
 class ProviderError(Exception):
     """Base class: the bridge treats these as 'provider is unavailable', never as a crash."""
 

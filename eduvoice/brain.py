@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from eduvoice.content import Faq
-from eduvoice.interfaces import ChatMessage, ChatModel, LlmError
+from eduvoice.interfaces import ChatMessage, ChatModel, LlmError, describe
 
 log = logging.getLogger("eduvoice.brain")
 
@@ -116,7 +116,7 @@ class Brain:
                 timeout=self._timeout_s,
             )
         except (LlmError, TimeoutError) as exc:
-            log.warning("model failed (%s) -> transfer to operator", exc)
+            log.warning("model failed (%s) -> transfer to operator", describe(exc))
             return Decision(action="transfer", intent="tech_problem")
         latency_ms = (asyncio.get_running_loop().time() - started) * 1000
 

@@ -75,7 +75,12 @@ class Settings:
     # --- dialogue timing --------------------------------------------------
     silence_reprompt_s: float = _float("SILENCE_REPROMPT_S", 6.0)
     filler_after_s: float = _float("FILLER_AFTER_S", 1.2)
-    stt_timeout_s: float = _float("STT_TIMEOUT_S", 5.0)
+    # Recognition is queued on the provider's side and normally completes in 1.4–2.0 s,
+    # but its tail is longer: a job was still "processing" at 5 s on a live call and the
+    # caller was told there was a technical problem. The filler covers the wait from
+    # 1.2 s, so a longer budget costs nothing a caller notices; a false "technical
+    # problem" costs the whole conversation.
+    stt_timeout_s: float = _float("STT_TIMEOUT_S", 9.0)
     llm_timeout_s: float = _float("LLM_TIMEOUT_S", 5.0)
     tts_first_chunk_timeout_s: float = _float("TTS_FIRST_CHUNK_TIMEOUT_S", 3.0)
     max_turns: int = _int("MAX_TURNS", 8)
