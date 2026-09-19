@@ -14,7 +14,7 @@ make check
 ```
 
 Ожидается: `All checks passed!` от линтера, `Success: no issues found` от проверки типов
-и `183 passed` от тестов.
+и `192 passed` от тестов.
 
 ```bash
 uv run pytest -q --cov=eduvoice --cov-report=term
@@ -103,20 +103,26 @@ call 0db3e713-… ended after 38.4 s, 1 turns (caller_hangup)
 
 ## 3. Перебивание (barge-in)
 
-```bash
-make barge-test     # «звонящий» начинает говорить поверх приветствия
-make logs
-```
+Перебить можно **ответ** и фразу «одну минуту, проверяю». **Приветствие — нельзя**, это
+решение: оно объясняет, что это за служба, и в шумном помещении обрывалось шумом за
+полсекунды, так что звонящий не успевал ничего понять.
+
+Проверка: позвонить, дождаться конца приветствия, задать вопрос и **заговорить поверх
+ответа**. В журнале:
 
 ```
 call f64feab6-…: barge-in
-call f64feab6-…: heard 'stipendiya qanday olinadi'
-call f64feab6-…: decision=faq intent=faq_keyword (301 ms total)
+call f64feab6-…: heard 'akademik taʼtil qanday rasmiylashtiriladi'
 ```
 
-Бот замолкает примерно за 0.5 с и слышит фразу **целиком**: кадры, сказанные поверх бота,
-переигрываются в детектор речи, поэтому начало перебившей фразы не теряется
-(`SpeechDetector.seed`, тест `test_seed_replays_the_start_of_an_interrupted_phrase`).
+Бот замолкает за 0,3–0,5 с и слышит новую фразу **целиком**: сказанное поверх него
+переигрывается в детектор речи, поэтому начало не теряется (`SpeechDetector.seed`).
+
+То же переигрывание работает и для приветствия: вопрос, заданный поверх него, не
+пропадает — он доходит до распознавания в тот момент, когда приветствие заканчивается
+(`test_a_question_asked_over_the_greeting_is_handed_back_not_dropped`).
+
+Включить перебивание приветствия: `INTERRUPTIBLE_GREETING=1` в `.env` и перезапуск.
 
 ---
 
