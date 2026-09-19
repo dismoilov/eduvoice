@@ -126,6 +126,7 @@ class CallSession:
         self._turn_index = 0
         self._reprompts = 0
         self._unheard = 0
+        self._carried_over = False
         self._finishing = False
         self._cleaned_up = False
         self._cleanup_task: asyncio.Task[None] | None = None
@@ -318,14 +319,11 @@ class CallSession:
             return
         asked_already = self._speech.seed(list(self._recent))
         self._recent.clear()
-        spoken = [u for u in asked_already if u.duration_ms >= MIN_UTTERANCE_MS]
-        if spoken:
+        if asked_already:
             # They asked while we were talking and are now waiting for the answer. The
-            # last one is the question they are waiting on. Fragments are dropped: a
-            # noisy room produces one or two per greeting, and answering those wastes a
-            # recognition and, worse, tells the caller they were not understood.
+            # last one is the question they are waiting on.
             log.info("call %s: question asked while we were speaking", self.call_id)
-            self._think(spoken[-1])
+            self._think(asked_already[-1], carried_over=True)
 
     def _speak_prompt(self, prompt_id: str) -> None:
         """Play a service phrase (cached audio, no synthesis delay)."""
@@ -442,8 +440,13 @@ class CallSession:
 
     # ------------------------------------------------------------ thinking
 
-    def _think(self, utterance: Utterance) -> None:
-        """Starts the turn: recognition and decision in one task, a filler in another."""
+    def _think(self, utterance: Utterance, carried_over: bool = False) -> None:
+        """Starts the turn: recognition and decision in one task, a filler in another.
+
+        `carried_over` marks a phrase picked up while the assistant itself was talking.
+        Such a turn may answer a question but may not end the call — see `_act`.
+        """
+        self._carried_over = carried_over
         self._state = "thinking"
         self._reprompts = 0
         self._think_task = asyncio.create_task(self._run_turn(utterance))
@@ -581,6 +584,21 @@ class CallSession:
                 self._note_spoken(prompt)
                 await self._finish("operator", prompt)
             case "goodbye":
+                if self._carried_over and not self._last_answer:
+                    # Nobody says goodbye over a greeting, before they have asked
+                    # anything. This was sound picked up while we were talking: a hall
+                    # produces bursts all through the greeting, recognition turns them
+                    # into short words — "Xoʻp", "Alo" — and the model reads those as
+                    # farewells. On a real call that hung up fourteen seconds in, on a
+                    # caller who had not yet said a word. Once they have been answered,
+                    # a farewell over the tail of the answer is exactly what it seems.
+                    log.info(
+                        "call %s: ignoring a farewell heard while we were talking",
+                        self.call_id,
+                    )
+                    self._state = "listening"  # `_listen` alone would leave us thinking
+                    self._listen()
+                    return
                 self._note_spoken("goodbye")
                 await self._finish("hangup", "goodbye")
             case "repeat":

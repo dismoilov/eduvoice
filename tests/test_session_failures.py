@@ -507,3 +507,49 @@ async def test_a_telephone_s_g711_is_decoded_before_anything_listens_to_it():
     assert 7000 < spoken < 9000, f"a word arrived at RMS {spoken:.0f}, not the 8000 sent"
     assert silent < 100, f"silence arrived at RMS {silent:.0f}"
     await session.aclose()
+
+
+async def test_a_farewell_heard_over_our_own_voice_does_not_hang_up_on_a_silent_caller():
+    """Reported from the hall, fourteen seconds into a call: noise under the greeting was
+    carried over, recognition turned it into "Xoʻp" — "all right" — the model read that as
+    a farewell, and the assistant hung up on a caller who had not asked anything yet.
+
+    Nobody says goodbye over a greeting they are still listening to. And the call must be
+    left listening, not parked in `thinking` where the caller is talking to a deaf line.
+    """
+    _reader, _writer, registry, session = build(FarewellModel())
+    session._state = "speaking"
+    for _ in range(40):
+        session._recent.append(SPEECH)
+    for _ in range(50):
+        session._recent.append(QUIET)
+
+    session._listen()
+    assert session.state == "thinking", "the carried-over sound did not start a turn"
+    await asyncio.wait_for(session._think_task, timeout=5)
+
+    assert registry.next_action(session.call_id) != "hangup", "hung up on a silent caller"
+    assert session.state == "listening", "the call was parked, deaf to the question"
+    await session.aclose()
+
+
+async def test_a_farewell_over_the_tail_of_an_answer_still_ends_the_call():
+    """The other half, and the reason the guard is not simply "never end on carry-over":
+    someone who has been answered and says "rahmat, xayr" while the answer is still
+    playing means it. Keeping them on the line then is its own rudeness.
+    """
+    _reader, _writer, registry, session = build(FarewellModel())
+    session._last_answer = "Stipendiya 59-son qaror asosida toʻlanadi."
+    session._state = "speaking"
+    for _ in range(40):
+        session._recent.append(SPEECH)
+    for _ in range(50):
+        session._recent.append(QUIET)
+
+    session._listen()
+    # The decision for the dialplan is written down before the closing phrase is spoken,
+    # and nothing is draining the output here, so wait for the decision, not the task.
+    await wait_for(lambda: registry.next_action(session.call_id) == "hangup")
+
+    assert session.state == "closing", "a real farewell was ignored"
+    await session.aclose()
