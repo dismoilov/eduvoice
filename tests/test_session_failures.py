@@ -682,3 +682,44 @@ async def test_a_farewell_over_the_tail_of_an_answer_still_ends_the_call():
 
     assert session.state == "closing", "a real farewell was ignored"
     await session.aclose()
+
+
+async def test_a_long_wait_for_recognition_is_never_a_silent_one():
+    """Recognition is queued on the provider's side. Normally 1.2-1.6 s; on 19.09 a job
+    waited 55 s, and two live calls hit the 8 s budget and went to a person with
+    "technical problem". Raising the budget is half of it. The other half: a caller who
+    hears "one moment" and then nothing for fifteen seconds decides the line is dead.
+    They are told, every few seconds, that we are still there.
+    """
+    slow = RecordingStt(latency_ms=700)
+    cfg = replace(CONFIG, filler_after_s=0.05, hold_every_s=0.15)
+    _reader, _writer, _registry, session = build(SlowChatModel(), config=cfg)
+    session._stt = slow
+    session._state = "listening"
+    # Every phrase played goes through the prompt library; count them by name there.
+    # The synthesiser's own log will not do: a phrase is synthesised once and played
+    # from memory after that.
+    played: list[str] = []
+    audio = session._prompts.audio
+
+    async def counted(prompt_id: str, tts):
+        played.append(prompt_id)
+        return await audio(prompt_id, tts)
+
+    session._prompts.audio = counted  # type: ignore[method-assign]
+
+    for frame in [SPEECH] * 35 + [QUIET] * 10:
+        await session._on_audio(frame)
+    await wait_for(lambda: slow.completed == 1)
+    assert "still_checking" in played, "nothing said during a 700 ms recognition"
+    # The turn is over only when the assistant starts answering — the model still has to
+    # decide after recognition, and the caller is kept informed through that too.
+    await wait_for(lambda: session.state != "thinking")
+    while_waiting = list(played)
+    await asyncio.sleep(0.4)  # long after the answer: the reminders must have stopped
+
+    assert "filler" in while_waiting, "no filler at all"
+    reminders = while_waiting.count("still_checking")
+    assert reminders >= 2, f"{reminders} reminder(s) in a 700 ms wait with one every 150 ms"
+    assert "still_checking" not in played[len(while_waiting) :], "still reminding after the answer"
+    await session.aclose()

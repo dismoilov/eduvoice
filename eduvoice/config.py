@@ -95,6 +95,10 @@ class Settings:
     # --- dialogue timing --------------------------------------------------
     silence_reprompt_s: float = _float("SILENCE_REPROMPT_S", 6.0)
     filler_after_s: float = _float("FILLER_AFTER_S", 1.2)
+    # While the answer is still not ready after the filler, "please hold, still checking"
+    # is repeated this often. Recognition is queued on the provider's side and a job was
+    # seen waiting 55 s; a caller told nothing for that long assumes the line is dead.
+    hold_every_s: float = _float("HOLD_EVERY_S", 6.0)
     # Recognition is queued on the provider's side and normally completes in 1.4–2.0 s,
     # but its tail is longer: a job was still "processing" at 5 s on a live call and the
     # caller was told there was a technical problem. The filler covers the wait from

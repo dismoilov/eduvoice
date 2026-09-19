@@ -497,16 +497,24 @@ class CallSession:
         self._filler_task = asyncio.create_task(self._filler_after_delay())
 
     async def _filler_after_delay(self) -> None:
-        """ "One moment, I am checking" — played only if the answer is not ready in time."""
+        """ "One moment, I am checking" — played only if the answer is not ready in time.
+
+        Then "please hold, still checking", again and again, for as long as the wait
+        lasts. Recognition is queued on the provider's side: usually 1.2-1.6 s, but a
+        job was seen waiting 55 s. A caller who hears nothing for ten seconds decides
+        the line is dead and hangs up on an answer that was about to arrive.
+        """
         await asyncio.sleep(self._cfg.filler_after_s)
-        if self._state != "thinking":
-            return
-        with contextlib.suppress(Exception):
-            pcm = await self._prompts.audio("filler", self._tts)
-            if self._state == "thinking":  # the answer may have arrived while synthesising
-                self._out.write(pcm)
-                # The caller can hear this, so they may interrupt it.
-                self._barge.playback_audible()
+        prompt = "filler"
+        while self._state == "thinking":
+            with contextlib.suppress(Exception):
+                pcm = await self._prompts.audio(prompt, self._tts)
+                if self._state == "thinking":  # the answer may have arrived while synthesising
+                    self._out.write(pcm)
+                    # The caller can hear this, so they may interrupt it.
+                    self._barge.playback_audible()
+            prompt = "still_checking"
+            await asyncio.sleep(self._cfg.hold_every_s)
 
     async def _run_turn(self, utterance: Utterance) -> None:
         """One turn: recognise, decide, act. Any failure hands the caller to a human.

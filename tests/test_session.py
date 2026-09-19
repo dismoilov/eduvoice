@@ -19,6 +19,7 @@ QUIET = b"\x00" * FRAME_BYTES
 PROMPTS = {
     "greeting": "salom",
     "filler": "bir daqiqa",
+    "still_checking": "hali tekshiryapman",
     "reprompt": "savolingizni ayting",
     "repeat_please": "qaytaring",
     "not_understood": "tushunmadim",

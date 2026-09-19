@@ -16,6 +16,9 @@ greeting: >-
 
 filler: Bir daqiqa, tekshiryapman.
 
+# Repeated while recognition is slow, so a long wait is never a silent one.
+still_checking: Iltimos, kuting. Hali tekshiryapman.
+
 anything_else: Yana savolingiz bormi?
 
 repeat_please: Kechirasiz, eshitmadim. Iltimos, savolingizni qaytaring.
