@@ -1,5 +1,9 @@
-# Service phrases, Uzbek only. Person B turns these into audio (see PLAN.md, task V6).
-# DRAFT: wording must be checked by a native speaker before the demo.
+# Service phrases, Uzbek only. The bridge synthesises them once and keeps the audio
+# (`make voice-prewarm`), so an edit here costs one synthesis and then nothing.
+#
+# `ivr_menu` is no longer played to anyone: dialling 7000 goes straight to the
+# assistant. It is kept because `voice_tools ivr` still builds the Asterisk sound file
+# from it, should a menu ever be wanted again.
 
 ivr_menu: >-
   Oliy taʼlim vazirligiga xush kelibsiz.

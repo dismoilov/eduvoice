@@ -6,7 +6,8 @@ barge-in would arrive too late and the caller would talk over a bot that cannot 
 
 States and what moves the call between them::
 
-    greeting  -- the greeting is playing; only barge-in is watched
+    greeting  -- the greeting is playing; it cannot be interrupted by default, and what
+                 the caller says meanwhile is kept for the moment it ends
        |  playback finished / caller interrupted
        v
     listening -- frames go to the voice detector; silence triggers a reprompt
