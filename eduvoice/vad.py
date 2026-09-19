@@ -72,10 +72,10 @@ class LoudnessGate:
     at once and climbs back slowly, so a lull does not raise the bar.
     """
 
-    def __init__(self, margin: float, window_frames: int = 100, quietest: float = 30.0) -> None:
+    def __init__(self, margin: float, floor_at_least: float, window_frames: int = 100) -> None:
         self._margin = margin
         self._recent = deque[float](maxlen=window_frames)
-        self._quietest = quietest
+        self._floor_at_least = floor_at_least
 
     @staticmethod
     def level(frame: bytes) -> float:
@@ -89,11 +89,19 @@ class LoudnessGate:
         a hall changes the background in one step, and an average takes a quarter of a
         minute to catch up — the whole call, in other words. Speech has dips between
         syllables, so even continuous talking leaves the window near the room level.
+
+        The tenth percentile rather than the minimum: the first frame of a call arrives
+        before any room audio does — measured at 149 against a hall at 4000 — and a plain
+        minimum let that one frame set the bar for the next two seconds.
         """
         rms = self.level(frame)
         self._recent.append(rms)
-        floor = max(self._floor_of(self._recent), self._quietest)
-        return rms >= floor * self._margin
+        # Whichever is greater: a fixed level the caller must reach, or a modest step
+        # above the room. Multiplying the room's level alone runs away — in a room at
+        # 3400 a tenfold margin asks for 34 000, past what a 16-bit sample can hold, and
+        # nobody is ever heard. A fixed level alone is deaf the other way, in a room
+        # louder than it. The louder of the two is right in both places.
+        return rms >= max(self._floor_at_least, self._floor_of(self._recent) * self._margin)
 
     @staticmethod
     def _floor_of(levels: deque[float]) -> float:
@@ -117,7 +125,7 @@ class SpeechDetector:
         cfg = config or default_settings
         vad = speech_test or WebrtcSpeechTest(cfg.vad_aggressiveness)
         if speech_test is None and cfg.loudness_margin > 1.0:
-            gate = LoudnessGate(cfg.loudness_margin, quietest=cfg.loudness_floor_min)
+            gate = LoudnessGate(cfg.loudness_margin, floor_at_least=cfg.speech_floor)
 
             def heard(frame: bytes) -> bool:
                 # The gate runs on every frame, whatever the detector thinks, or the room
@@ -224,7 +232,7 @@ class BargeInDetector:
         cfg = config or default_settings
         vad = speech_test or WebrtcSpeechTest(cfg.vad_aggressiveness)
         if speech_test is None and cfg.barge_in_margin > 1.0:
-            gate = LoudnessGate(cfg.barge_in_margin, quietest=cfg.loudness_floor_min)
+            gate = LoudnessGate(cfg.barge_in_margin, floor_at_least=cfg.speech_floor)
 
             def heard(frame: bytes) -> bool:
                 loud_enough = gate(frame)

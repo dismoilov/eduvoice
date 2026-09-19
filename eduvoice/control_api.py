@@ -86,9 +86,13 @@ class ControlApi:
                 form = parse_qs(body)
                 caller = form.get("caller", [""])[0]
                 started = self._registry.start(call_id, caller=caller)
-                # audionativeformat arrives as "(ulaw)" or "(ulaw|alaw)": the first one
+                # audionativeformat arrives as "(ulaw)" or "(ulaw|alaw)": the first one.
+                # Only overwritten when the dialplan actually sends one — a repeated
+                # announcement must keep what we already know, or the call would fall
+                # back to "linear" and the caller's G.711 would be heard as a roar.
                 raw_format = form.get("format", [""])[0].strip().lower()
-                started.audio_format = raw_format.strip("()").split("|")[0].strip()
+                if raw_format:
+                    started.audio_format = raw_format.strip("()").split("|")[0].strip()
                 log.info(
                     "call %s announced by dialplan (caller=%s, format=%s)",
                     call_id,

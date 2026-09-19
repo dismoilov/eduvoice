@@ -322,3 +322,51 @@ async def test_audio_in_a_format_the_bridge_cannot_decode_goes_to_a_person_at_on
 
     assert registry.next_action(call_id) == "operator"
     assert KIND_HANGUP in writer.kinds(), "the dialplan was never handed the call back"
+
+
+async def test_interrupting_the_answer_keeps_the_whole_interrupting_phrase():
+    """The one case the suite never covered at session level, which is how two
+    regressions reached the server today.
+
+    `_listen` is reached twice on an interruption — from the frame loop and from
+    `_run_speech`'s `finally`. The second call used to `reset()` the detector, throwing
+    away the frames the first had just replayed, so the start of every interruption was
+    clipped: "operator bilan gaplashmoqchiman" arrived as "...bilan gaplashmoqchiman".
+    """
+    call_id = str(uuid.uuid4())
+    reader, _writer, _registry, session = build(BrokenChatModel())
+    reader.feed_data(encode(0x01, uuid.UUID(call_id).bytes))
+    task = asyncio.create_task(session.run())
+    await wait_for(lambda: session.state == "listening")
+
+    session._speak("Uzun javob matni, hali aytilmagan qismi bor.")
+    await wait_for(lambda: session.state == "speaking")
+    for _ in range(40):  # the caller talks over the answer
+        reader.feed_data(encode(0x10, SPEECH))
+    await wait_for(lambda: session.state != "speaking", timeout=5)
+
+    kept = len(session._speech._utterance) // len(SPEECH)
+    assert kept >= 30, f"only {kept} of 40 frames of the interruption survived"
+    reader.feed_eof()
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(task, timeout=5)
+
+
+async def test_a_question_finished_over_the_answer_is_not_undone_by_the_second_listen():
+    """If the replay completes a phrase, `_listen` starts the turn. The second call must
+    not knock the session back to `listening`: that killed the filler and let a reprompt
+    fire over the answer being prepared for the very question just asked."""
+    _reader, _writer, _registry, session = build(SlowChatModel())
+    session._state = "speaking"
+    for _ in range(40):
+        session._recent.append(SPEECH)
+    for _ in range(50):
+        session._recent.append(QUIET)
+
+    session._listen()
+    started = session.state
+    session._listen()
+
+    assert started == "thinking", "a finished question did not start a turn"
+    assert session.state == "thinking", "the second call undid the turn"
+    await session.aclose()

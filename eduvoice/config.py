@@ -56,23 +56,21 @@ class Settings:
     # How much louder than the room a frame must be to count as the caller talking.
     # 1.0 turns the test off and trusts the voice detector alone, which is right on a
     # quiet line and useless in a hall. Measured at the venue: room RMS ~3400.
-    # Multiplied by the room's level, floored at `loudness_floor_min`. On the real leg
-    # from the venue the room's tenth percentile is under 30 for four frames in five, so
-    # in practice this is an absolute threshold of `margin x floor_min` — 1000 by default.
-    # Measured there: both questions arrive whole, 1.5 and 1.7 s long, delivered 0.7 s
-    # after the last word, with one spurious phrase in twenty-four seconds. The earlier
-    # 1.5 was fitted to a mis-decoded stream whose "room" was fifty times too loud.
-    loudness_margin: float = _float("LOUDNESS_MARGIN", 10.0)
-    # The quietest a room is assumed to be. Keeps the threshold from collapsing onto a
-    # digitally silent line, and is what the margin multiplies on a quiet one: 30 x 10 =
-    # 300, which is the value that holds on both lines measured. At 100 (threshold 1000)
-    # the hall is still perfect but a quiet test line comes apart into 400 ms fragments.
-    loudness_floor_min: float = _float("LOUDNESS_FLOOR_MIN", 30.0)
+    # A frame counts as the caller talking when it is above BOTH of these: a fixed level
+    # (`speech_floor`) and a step above the room (`loudness_margin` x the room's level).
+    # 300 measured on the caller's own leg of a real call from the venue: the room sits at
+    # RMS 68 and the questions at 4400-8800, so 300 separates them cleanly while a quiet
+    # test line, whose speech is around 360, still clears it. The margin only matters in a
+    # room louder than 150 — there the fixed level would be deaf, and a step above the
+    # room is what is wanted. Multiplying alone runs away: at ten times, a room at 3400
+    # asks for 34 000, which no 16-bit sample can reach.
+    speech_floor: float = _float("SPEECH_FLOOR", 300.0)
+    loudness_margin: float = _float("LOUDNESS_MARGIN", 2.0)
     # Interrupting the assistant needs the same evidence as starting a phrase: measured
     # at the venue, anything gentler let the room itself cut the answer off within two
     # seconds, and nothing harsher was needed — the caller still interrupts 0.3-0.5 s
     # after they start speaking, on both the hall line and a clean one.
-    barge_in_margin: float = _float("BARGE_IN_MARGIN", 10.0)
+    barge_in_margin: float = _float("BARGE_IN_MARGIN", 2.0)
     # Whether the caller may talk over the greeting. Off: a first-time caller must hear
     # what the service is, and a noisy room interrupts it before they hear anything.
     interruptible_greeting: bool = os.getenv("INTERRUPTIBLE_GREETING", "") == "1"

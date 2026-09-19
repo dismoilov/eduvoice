@@ -161,49 +161,44 @@ def test_nobody_can_interrupt_a_phrase_that_has_not_been_played_yet():
     assert any(detector.push(SPEECH) for _ in range(10)), "a real interruption was ignored"
 
 
-def test_a_hall_full_of_people_is_not_a_person_speaking():
-    """Measured at the venue: background steady at RMS ~3400, and `webrtcvad` called
-    100 % of frames speech at its strictest setting — it even calls pure digital silence
-    speech. A phrase can then never end, because ending one needs silence, so the caller
-    talked for twenty seconds and not one word was ever sent for recognition.
+def _noise(rms: float, seed: int = 7) -> bytes:
+    import numpy as np
 
-    A handset sits centimetres from the mouth, so the caller's own voice arrives far
-    louder than the room. That difference is what this measures.
+    return (np.random.default_rng(seed).standard_normal(160) * rms).astype(np.int16).tobytes()
+
+
+def test_the_caller_is_heard_over_the_room_in_every_room_measured():
+    """A frame counts as the caller when it clears a fixed level *or* a step above the
+    room, whichever is higher.
+
+    Multiplying the room's level alone runs away: at the tenfold margin shipped for an
+    hour today, a room at RMS 3400 asked for 34 000, which no 16-bit sample can reach —
+    nobody would have been heard at all, and `_check_silence` ends in a goodbye, not an
+    operator. A fixed level alone is deaf the other way, in a room louder than itself.
+
+    The pairs below are measurements: the venue's own leg (room 14-68, questions
+    4400-8800), a clean test line, and the two loud rooms that broke the ratio.
     """
-    import numpy as np
-
     from eduvoice.vad import LoudnessGate
 
-    def noise(rms: float) -> bytes:
-        rng = np.random.default_rng(7)
-        return (rng.standard_normal(160) * rms).astype(np.int16).tobytes()
-
-    hall, voice = noise(3400), noise(9000)
-    gate = LoudnessGate(margin=1.8)
-
-    for _ in range(100):  # the room, before anyone says anything
-        assert gate(hall) is False, "the hall was mistaken for the caller"
-    assert gate(voice) is True, "the caller was not heard over the hall"
-    for _ in range(50):
-        gate(hall)
-    assert gate(hall) is False, "the hall crept back in once it had been heard over"
+    for room, voice in ((14, 4400), (68, 8800), (0, 362), (350, 2100), (3400, 9000)):
+        gate = LoudnessGate(
+            base_settings.loudness_margin, floor_at_least=base_settings.speech_floor
+        )
+        for _ in range(120):
+            gate(_noise(room))
+        assert gate(_noise(voice, seed=9)) is True, f"unheard: room {room}, voice {voice}"
 
 
-def test_the_loudness_gate_still_hears_someone_on_a_quiet_line():
-    """The whole point is to work in both places: a silent office line must not need
-    shouting."""
-    import numpy as np
-
+def test_the_room_alone_never_counts_as_speech():
     from eduvoice.vad import LoudnessGate
 
-    rng = np.random.default_rng(3)
-    quiet_room = (rng.standard_normal(160) * 40).astype(np.int16).tobytes()
-    ordinary_voice = (rng.standard_normal(160) * 1200).astype(np.int16).tobytes()
-    gate = LoudnessGate(margin=1.8)
-
-    for _ in range(100):
-        gate(quiet_room)
-    assert gate(ordinary_voice) is True, "an ordinary voice on a quiet line was ignored"
+    for room in (14, 68, 200, 3400):
+        gate = LoudnessGate(
+            base_settings.loudness_margin, floor_at_least=base_settings.speech_floor
+        )
+        heard = [gate(_noise(room, seed=i)) for i in range(120)]
+        assert not any(heard[20:]), f"a room at RMS {room} was taken for the caller"
 
 
 def test_a_question_asked_over_the_greeting_is_handed_back_not_dropped():

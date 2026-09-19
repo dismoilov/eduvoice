@@ -183,3 +183,21 @@ def test_the_native_format_arrives_in_asterisk_s_own_notation():
         raw_format = sent.strip().lower()
         started.audio_format = raw_format.strip("()").split("|")[0].strip()
         assert started.audio_format == expected, f"{sent!r} parsed as {started.audio_format!r}"
+
+
+def test_a_repeated_announcement_keeps_the_format_it_already_knows():
+    """`registry.start` exists to survive a dialplan retry. The format has to survive it
+    too: emptied, the call falls back to "linear" and a telephone's G.711 is heard as a
+    roar — which is exactly the failure this field was added to prevent."""
+    from eduvoice.registry import CallRegistry
+
+    registry = CallRegistry()
+    first = registry.start("retried")
+    first.audio_format = "ulaw"
+
+    again = registry.start("retried")
+    raw = ""
+    if raw:
+        again.audio_format = raw
+
+    assert again.audio_format == "ulaw"

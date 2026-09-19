@@ -210,6 +210,14 @@ class CallSession:
             # roar and never recognised. Say so loudly and give the caller a person now,
             # rather than a confident "I did not understand you" after twenty seconds.
             self._format_refused = True
+            self._registry.ensure(self.call_id).turns.append(
+                Turn(
+                    question="",
+                    answer=self._prompts.text("transfer"),
+                    intent="audio_format",
+                    action="transfer",
+                )
+            )
             log.error(
                 "call %s: audio arrives as %s, which the bridge cannot decode; the endpoint"
                 " must be limited to ulaw/alaw (asterisk/pjsip.endpoint_custom_post.conf)",
@@ -262,8 +270,6 @@ class CallSession:
                 log.info("call %s: barge-in over the filler", self.call_id)
                 await self._stop_thinking()
                 self._listen()
-                self._speech.seed(list(self._recent))
-                self._recent.clear()
             return
 
         utterance = self._speech.push(frame)
@@ -292,7 +298,17 @@ class CallSession:
 
         Without this a question asked over the assistant was thrown away, and the caller
         heard "I did not understand you" in reply to words we had deliberately discarded.
+
+        Called from two places on an interruption — here and from `_run_speech`'s
+        `finally` — so it has to be safe to call twice. It is not merely wasteful the
+        second time: `reset()` would throw away the very frames the first call had just
+        replayed, clipping the start off every interruption, and if the first call had
+        started a turn it would knock the session out of `thinking` back to `listening`,
+        killing the filler and letting a reprompt fire over the answer being prepared.
+        Nothing left to hand over and already past speaking means there is nothing to do.
         """
+        if not self._recent and self._state in ("listening", "thinking", "closing"):
+            return
         self._state = "listening"
         self._speech.reset()
         if not self._recent:
